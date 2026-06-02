@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { VForm } from 'vuetify/components/VForm'
 import { useCrud } from '@/composables/useCrud'
 import type { TipoPagoDto } from '@/types/api'
 
@@ -10,6 +11,7 @@ const {
   openCreate, openEdit, openDelete, confirmDelete, save,
 } = useCrud<TipoPagoDto>('/tipos-pago?todos=true')
 
+const formRef = ref<VForm>()
 const form = ref({ nombre: '', orden: 0, activo: true })
 
 watch(dialog, open => {
@@ -19,8 +21,22 @@ watch(dialog, open => {
       orden: editingItem.value?.orden ?? 0,
       activo: editingItem.value?.activo ?? true,
     }
+    nextTick(() => formRef.value?.resetValidation())
   }
 })
+
+const rules = {
+  nombre: [
+    (v: string) => (!!v && !!v.trim()) || 'El nombre es obligatorio',
+    (v: string) => (v?.length <= 80) || 'Máximo 80 caracteres',
+  ],
+}
+
+async function handleSave() {
+  const { valid } = await formRef.value!.validate()
+  if (valid)
+    save(form.value)
+}
 
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
@@ -36,6 +52,7 @@ const headers = [
     <VCard>
       <VCardItem>
         <VCardTitle>Tipos de Pago</VCardTitle>
+        <VCardSubtitle>Transferencia, tarjetas, etc. Se usan al registrar el pago de facturas.</VCardSubtitle>
         <template #append>
           <VBtn prepend-icon="tabler-plus" @click="openCreate">Nuevo</VBtn>
         </template>
@@ -70,13 +87,19 @@ const headers = [
       <VCard :title="editingItem ? 'Editar tipo de pago' : 'Nuevo tipo de pago'">
         <DialogCloseBtn @click="dialog = false" />
         <VCardText>
-          <VForm @submit.prevent="save(form)">
+          <VForm ref="formRef" @submit.prevent="handleSave">
             <VRow>
               <VCol cols="12">
-                <AppTextField v-model="form.nombre" label="Nombre *" required />
+                <AppTextField
+                  v-model="form.nombre"
+                  label="Nombre *"
+                  :rules="rules.nombre"
+                  placeholder="Ej. Transferencia, Tarjeta 1"
+                  maxlength="80"
+                />
               </VCol>
               <VCol cols="12" sm="6">
-                <AppTextField v-model.number="form.orden" label="Orden" type="number" />
+                <AppTextField v-model.number="form.orden" label="Orden" type="number" :min="0" />
               </VCol>
               <VCol cols="12" sm="6" class="d-flex align-center">
                 <VSwitch v-model="form.activo" label="Activo" color="primary" />
@@ -86,7 +109,7 @@ const headers = [
         </VCardText>
         <VCardActions class="justify-end pt-0 pb-4 px-6">
           <VBtn variant="tonal" @click="dialog = false">Cancelar</VBtn>
-          <VBtn :loading="saving" @click="save(form)">Guardar</VBtn>
+          <VBtn :loading="saving" @click="handleSave">Guardar</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>

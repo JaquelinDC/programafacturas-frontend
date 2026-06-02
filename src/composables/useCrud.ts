@@ -5,6 +5,10 @@ import { $api } from '@/utils/api'
  * Gestiona la lista, el diálogo de edición/creación y la confirmación de borrado.
  */
 export function useCrud<T extends { id: number }, TRequest = Partial<T>>(endpoint: string) {
+  // endpoint puede incluir query params para el listado (p.ej. '/tipos-pago?todos=true').
+  // Las mutaciones (POST/PUT/DELETE) usan solo la parte del path, sin query string.
+  const baseEndpoint = endpoint.split('?')[0]
+
   const items = ref<T[]>([])
   const loading = ref(false)
   const saving = ref(false)
@@ -57,18 +61,20 @@ export function useCrud<T extends { id: number }, TRequest = Partial<T>>(endpoin
     saving.value = true
     try {
       if (editingItem.value?.id) {
-        await $api(`${endpoint}/${editingItem.value.id}`, { method: 'PUT', body })
+        await $api(`${baseEndpoint}/${editingItem.value.id}`, { method: 'PUT', body: body as any })
         showMsg('Registro actualizado correctamente')
       }
       else {
-        await $api(endpoint, { method: 'POST', body })
+        await $api(baseEndpoint, { method: 'POST', body: body as any })
         showMsg('Registro creado correctamente')
       }
       dialog.value = false
       await fetchAll()
     }
     catch (e: any) {
-      showMsg(e?.data?.message || 'Error al guardar', 'error')
+      console.error('[useCrud save] error:', e?.status, e?.data, e)
+      const msg = e?.data?.message || (e?.status ? `Error ${e.status} al guardar` : 'Error al guardar')
+      showMsg(msg, 'error')
     }
     finally {
       saving.value = false
@@ -85,7 +91,7 @@ export function useCrud<T extends { id: number }, TRequest = Partial<T>>(endpoin
       return
     saving.value = true
     try {
-      await $api(`${endpoint}/${deletingId.value}`, { method: 'DELETE' })
+      await $api(`${baseEndpoint}/${deletingId.value}`, { method: 'DELETE' })
       showMsg('Registro eliminado correctamente')
       deleteDialog.value = false
       await fetchAll()

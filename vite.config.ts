@@ -80,6 +80,14 @@ export default defineConfig({
     svgLoader(),
 
   ],
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:8085',
+        changeOrigin: true,
+      },
+    },
+  },
   define: { 'process.env': {} },
   resolve: {
     alias: {
