@@ -13,6 +13,7 @@ definePage({ meta: { title: 'Detalle Factura Proveedor' } })
 const route = useRoute()
 const router = useRouter()
 const id = computed(() => route.params.id as string)
+const listadoTarget = computed(() => ({ path: '/facturas', query: route.query.q ? { q: route.query.q } : undefined }))
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const factura = ref<FacturaProveedorDto | null>(null)
@@ -223,9 +224,9 @@ onUnmounted(() => {
   </div>
 
   <div v-else-if="factura">
-    <!-- Cabecera -->
+      <!-- Cabecera -->
     <div class="d-flex align-center gap-3 mb-4">
-      <VBtn icon variant="text" @click="router.push('/facturas')">
+      <VBtn icon variant="text" @click="router.push(listadoTarget)">
         <VIcon icon="tabler-arrow-left" />
       </VBtn>
       <div class="flex-grow-1">

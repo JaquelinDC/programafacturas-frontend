@@ -1,33 +1,33 @@
-# vue
+# programafacturas-frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+Frontend separado para consumir la API REST del backend `programafacturas`.
 
-## Recommended IDE Setup
+Proyecto original de referencia: `facturacion original-no tocar`.
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+## Docs
 
-## Type Support for `.vue` Imports in TS
+- `ARCHITECTURE.md`
+- `PROJECT_STRUCTURE_GUIDE.md`
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) to make the TypeScript language service aware of `.vue` types.
-
-## Customize configuration
-
-See [Vite Configuration Reference](https://vite.dev/config/).
-
-## Project Setup
+## Setup
 
 ```sh
 pnpm install
 ```
 
-### Compile and Hot-Reload for Development
+## Development
 
 ```sh
 pnpm dev
 ```
 
-### Type-Check, Compile and Minify for Production
+## Production
 
 ```sh
 pnpm build
 ```
+
+## Notes
+
+- La API base se configura en `VITE_API_BASE_URL`.
+- El token JWT se maneja en `src/stores/auth.ts`.

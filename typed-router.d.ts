@@ -27,6 +27,7 @@ declare module 'vue-router/auto-routes' {
     'extractos-id': RouteRecordInfo<'extractos-id', '/extractos/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
     'facturas': RouteRecordInfo<'facturas', '/facturas', Record<never, never>, Record<never, never>>,
     'facturas-id': RouteRecordInfo<'facturas-id', '/facturas/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
+    'facturas-subir-ticket': RouteRecordInfo<'facturas-subir-ticket', '/facturas/subir-ticket', Record<never, never>, Record<never, never>>,
     'facturas-emitidas': RouteRecordInfo<'facturas-emitidas', '/facturas-emitidas', Record<never, never>, Record<never, never>>,
     'login': RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>,
     'proveedores': RouteRecordInfo<'proveedores', '/proveedores', Record<never, never>, Record<never, never>>,

@@ -12,9 +12,11 @@ const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref('success')
 const recalculandoIncidencias = ref(false)
+const filtrosStorageKey = 'programafacturas.facturas.filtros'
 
 // ─── Filtros ──────────────────────────────────────────────────────────────────
 const filtros = ref<FacturaFiltrosRequest>({})
+const busquedaLista = ref('')
 
 // Sección del buscador desplegada o no
 const expandFiltros = ref(false)
@@ -66,6 +68,31 @@ const tipoColor: Record<string, string> = {
   INDETERMINADA: 'warning',
 }
 
+function sanitizarFiltros(input: FacturaFiltrosRequest): FacturaFiltrosRequest {
+  const out: FacturaFiltrosRequest = { ...input }
+  Object.keys(out).forEach(k => {
+    const key = k as keyof FacturaFiltrosRequest
+    if (out[key] === '' || out[key] === null)
+      delete out[key]
+  })
+  return out
+}
+
+function guardarFiltros() {
+  localStorage.setItem(filtrosStorageKey, JSON.stringify(filtros.value))
+}
+
+function cargarFiltrosGuardados() {
+  const raw = localStorage.getItem(filtrosStorageKey)
+  if (!raw) return
+  try {
+    filtros.value = JSON.parse(raw) as FacturaFiltrosRequest
+  }
+  catch {
+    localStorage.removeItem(filtrosStorageKey)
+  }
+}
+
 // ─── Quick filters ────────────────────────────────────────────────────────────
 function aplicarFiltroRapidoTipo(tipo: string) {
   filtros.value = { ...filtros.value, tipo: tipo || undefined }
@@ -81,13 +108,14 @@ function aplicarFiltroRapido(patch: Partial<FacturaFiltrosRequest>) {
 async function buscar() {
   loading.value = true
   try {
-    const body: FacturaFiltrosRequest = { ...filtros.value }
-    // Limpiar vacíos
-    Object.keys(body).forEach(k => {
-      const key = k as keyof FacturaFiltrosRequest
-      if (body[key] === '' || body[key] === null) delete body[key]
-    })
-    facturas.value = await $api<FacturaProveedorDto[]>('/facturas/buscar', { method: 'POST', body })
+    const body = sanitizarFiltros(filtros.value)
+    busquedaLista.value = JSON.stringify(body)
+    guardarFiltros()
+    facturas.value = await $api<FacturaProveedorDto[]>('/facturas', { query: body })
+  }
+  catch (e) {
+    console.error(e)
+    showMsg('No se pudo cargar el listado', 'error')
   }
   finally {
     loading.value = false
@@ -96,6 +124,7 @@ async function buscar() {
 
 function limpiarFiltros() {
   filtros.value = {}
+  localStorage.removeItem(filtrosStorageKey)
   buscar()
 }
 
@@ -206,6 +235,7 @@ function showMsg(msg: string, color = 'success') {
 
 onMounted(async () => {
   entidades.value = await $api<EntidadDto[]>('/entidades?todas=true')
+  cargarFiltrosGuardados()
   await buscar()
 })
 </script>
@@ -340,6 +370,35 @@ onMounted(async () => {
                 <AppTextField v-model="filtros.fechaCreacionHasta" label="Creación hasta" type="date" clearable density="compact" />
               </VCol>
 
+              <VCol cols="12" sm="6" md="3">
+                <AppSelect
+                  v-model="filtros.preset"
+                  label="Preset factura"
+                  :items="[
+                    { title: 'Todos', value: null },
+                    { title: 'Mes', value: 'mes' },
+                    { title: 'Trimestre', value: 'trimestre' },
+                  ]"
+                  clearable
+                  density="compact"
+                />
+              </VCol>
+
+              <VCol cols="12" sm="6" md="3">
+                <AppSelect
+                  v-model="filtros.presetCreacion"
+                  label="Preset creación"
+                  :items="[
+                    { title: 'Todos', value: null },
+                    { title: 'Hoy', value: 'hoy' },
+                    { title: 'Ayer', value: 'ayer' },
+                    { title: 'Semana', value: 'semana' },
+                  ]"
+                  clearable
+                  density="compact"
+                />
+              </VCol>
+
               <VCol cols="12" class="text-overline text-disabled pb-0">Datos de la factura</VCol>
 
               <!-- Proveedor -->
@@ -381,23 +440,11 @@ onMounted(async () => {
                 <AppTextField v-model.number="filtros.importeMax" label="Importe máx." type="number" clearable density="compact" />
               </VCol>
 
-              <!-- Switches -->
+              <!-- Otros filtros -->
               <VCol cols="12" class="text-overline text-disabled pb-0">Otros filtros</VCol>
               <VCol cols="12" sm="6" md="3" class="d-flex align-center">
                 <VSwitch v-model="filtros.soloConIncidencias" label="Solo con incidencias" color="warning" density="compact" hide-details />
               </VCol>
-              <VCol cols="12" sm="6" md="3" class="d-flex align-center">
-                <VSwitch
-                  :model-value="filtros.conciliadaConExtracto === true"
-                  label="Con extracto bancario"
-                  color="success"
-                  density="compact"
-                  hide-details
-                  @update:model-value="(v: boolean) => filtros.conciliadaConExtracto = v ? true : undefined"
-                />
-              </VCol>
-
-              <!-- Contabilidad exportada select -->
               <VCol cols="12" sm="6" md="3">
                 <AppSelect
                   v-model="filtros.contabilidadExportada"
@@ -406,6 +453,20 @@ onMounted(async () => {
                     { title: 'Todas', value: null },
                     { title: 'Sí exportadas', value: true },
                     { title: 'Pendientes', value: false },
+                  ]"
+                  clearable
+                  density="compact"
+                />
+              </VCol>
+
+              <VCol cols="12" sm="6" md="3">
+                <AppSelect
+                  v-model="filtros.conciliadaConExtracto"
+                  label="Extracto bancario"
+                  :items="[
+                    { title: 'Todos', value: null },
+                    { title: 'Con extracto', value: true },
+                    { title: 'Sin extracto', value: false },
                   ]"
                   clearable
                   density="compact"
@@ -428,6 +489,14 @@ onMounted(async () => {
         <VCardTitle>Facturas Proveedores</VCardTitle>
         <template #append>
           <span class="text-body-2 text-disabled me-3">{{ facturas.length }} resultados</span>
+          <VBtn
+            size="small"
+            variant="tonal"
+            color="primary"
+            prepend-icon="tabler-upload"
+            class="me-1"
+            @click="router.push('/facturas/subir-ticket')"
+          >Subir ticket</VBtn>
 
           <!-- Export buttons -->
           <VBtn
@@ -474,7 +543,7 @@ onMounted(async () => {
         :loading="loading"
         item-value="id"
         hover
-        @click:row="(_: any, { item }: any) => router.push(`/facturas/${item.id}`)"
+        @click:row="(_: any, { item }: any) => router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })"
       >
         <template #item.tipo="{ item }">
           <VChip
@@ -500,11 +569,16 @@ onMounted(async () => {
         </template>
         <template #item.proveedorFacturaNombre="{ item }">
           <span>{{ item.proveedorFacturaNombre ?? '—' }}</span>
-          <VIcon v-if="item.incidencias" icon="tabler-alert-triangle" size="14" color="warning" class="ms-1" />
+          <VTooltip v-if="item.incidencias" location="top">
+            <template #activator="{ props }">
+              <VIcon v-bind="props" icon="tabler-alert-triangle" size="14" color="warning" class="ms-1" />
+            </template>
+            <span>{{ item.incidencias }}</span>
+          </VTooltip>
           <VIcon v-if="item.rutaPdf" icon="tabler-file-type-pdf" size="14" color="error" class="ms-1" />
         </template>
         <template #item.actions="{ item }">
-          <IconBtn size="small" @click.stop="router.push(`/facturas/${item.id}`)">
+          <IconBtn size="small" @click.stop="router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })">
             <VIcon icon="tabler-eye" />
           </IconBtn>
         </template>

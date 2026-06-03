@@ -1,0 +1,9 @@
+# Reglas de Desarrollo para Facturación
+
+## Comportamiento Obligatorio (Crítico)
+- Si el usuario te pide avanzar en la migración o analizar un módulo y no tienes suficiente información, estás incompleto de datos, o no estás seguro de si un endpoint ya existe en REST o sigue en MVC, **NO asumas nada**. 
+- Detén la generación inmediatamente y haz las preguntas necesarias al usuario para aclarar el estado del código. No inventes rutas ni estados.
+
+## Contexto de la Migración actual
+- Proyecto: "programafacturas" (Migración de MVC/Thymeleaf/Sesión a API REST).
+- Estado de Facturas: Parcialmente migrado. Tiene la base REST principal pero faltan filtros complejos, subida de tickets, conciliación y procesado por IA.
