@@ -31,6 +31,7 @@ declare module 'vue-router/auto-routes' {
     'facturas-emitidas': RouteRecordInfo<'facturas-emitidas', '/facturas-emitidas', Record<never, never>, Record<never, never>>,
     'login': RouteRecordInfo<'login', '/login', Record<never, never>, Record<never, never>>,
     'proveedores': RouteRecordInfo<'proveedores', '/proveedores', Record<never, never>, Record<never, never>>,
+    'proveedores-factura': RouteRecordInfo<'proveedores-factura', '/proveedores-factura', Record<never, never>, Record<never, never>>,
     'second-page': RouteRecordInfo<'second-page', '/second-page', Record<never, never>, Record<never, never>>,
     'tipos-pago': RouteRecordInfo<'tipos-pago', '/tipos-pago', Record<never, never>, Record<never, never>>,
     'usuarios': RouteRecordInfo<'usuarios', '/usuarios', Record<never, never>, Record<never, never>>,

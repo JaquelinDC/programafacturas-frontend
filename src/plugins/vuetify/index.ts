@@ -3,6 +3,7 @@ import type { App } from 'vue'
 import { createVuetify } from 'vuetify'
 import { VBtn } from 'vuetify/components/VBtn'
 import { VVideo } from 'vuetify/labs/VVideo'
+import { es } from 'vuetify/locale'
 import defaults from './defaults'
 import { icons } from './icons'
 import { staticPrimaryColor, staticPrimaryDarkenColor, themes } from './theme'
@@ -43,6 +44,10 @@ export default function (app: App) {
     },
     defaults,
     icons,
+    locale: {
+      locale: 'es',
+      messages: { es },
+    },
     theme: optionTheme,
 
   })

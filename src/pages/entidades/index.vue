@@ -23,6 +23,8 @@ watch(dialog, open => {
   }
 })
 
+const search = ref('')
+
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
   { title: 'Código', key: 'codigo', width: 120 },
@@ -43,9 +45,26 @@ const headers = [
         </template>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="entidades"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover

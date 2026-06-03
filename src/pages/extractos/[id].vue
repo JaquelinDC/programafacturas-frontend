@@ -65,6 +65,8 @@ const importeColor = (n?: number) => {
   return n >= 0 ? 'text-success' : 'text-error'
 }
 
+const search = ref('')
+
 const headers = [
   { title: 'Fecha', key: 'fechaMovimiento', width: 100 },
   { title: 'Concepto', key: 'concepto' },
@@ -128,9 +130,26 @@ onMounted(async () => {
         </template>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="movimientos"
+        :search="search"
         item-value="id"
         hover
         density="compact"

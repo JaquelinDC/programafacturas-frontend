@@ -25,10 +25,14 @@ watch(dialog, open => {
   }
 })
 
+const search = ref('')
+
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
   { title: 'CIF', key: 'cif', width: 130 },
   { title: 'Nombre', key: 'nombre' },
+  { title: 'Dirección', key: 'direccion' },
+  { title: 'C.P.', key: 'codigoPostal', width: 100 },
   { title: 'Localidad', key: 'localidad' },
   { title: 'Cód. Contable', key: 'codigoContable', width: 140 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
@@ -45,9 +49,26 @@ const headers = [
         </template>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="clientes"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover

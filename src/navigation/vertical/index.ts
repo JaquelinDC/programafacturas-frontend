@@ -35,6 +35,11 @@ export default [
     icon: { icon: 'tabler-truck' },
   },
   {
+    title: 'Proveedores Factura',
+    to: { name: 'proveedores-factura' },
+    icon: { icon: 'tabler-building-warehouse' },
+  },
+  {
     title: 'Clientes',
     to: { name: 'clientes' },
     icon: { icon: 'tabler-users' },

@@ -21,6 +21,8 @@ async function cargar() {
 const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
 const formatDateTime = (d?: string) => d ? d.substring(0, 16).replace('T', ' ') : '—'
 
+const search = ref('')
+
 const headers = [
   { title: 'ID', key: 'id', width: 70 },
   { title: 'Banco', key: 'banco', width: 160 },
@@ -41,9 +43,26 @@ onMounted(cargar)
         <VCardTitle>Extractos Bancarios</VCardTitle>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="extractos"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover

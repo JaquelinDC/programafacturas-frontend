@@ -119,6 +119,8 @@ const clientesItems = computed(() =>
   })
 )
 
+const search = ref('')
+
 const headers = [
   { title: 'Nº Factura', key: 'numeroFactura', width: 140 },
   { title: 'Fecha', key: 'fechaFactura', width: 110 },
@@ -141,9 +143,26 @@ onMounted(fetchAll)
         </template>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="facturas"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover

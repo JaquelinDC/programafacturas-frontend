@@ -55,6 +55,8 @@ const headers = [
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
 ]
 
+const search = ref('')
+
 const rolColors: Record<string, string> = {
   ADMINISTRADOR: 'error',
   USUARIO: 'primary',
@@ -76,9 +78,26 @@ const rolColors: Record<string, string> = {
         </template>
       </VCardItem>
 
+      <VCardText>
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              dense
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
         :headers="headers"
         :items="usuarios"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover
