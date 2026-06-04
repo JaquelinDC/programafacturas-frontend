@@ -1,6 +1,18 @@
-<script setup lang="ts" generic="T extends unknown">
+<script setup lang="ts">
 import { PerfectScrollbar } from 'vue3-perfect-scrollbar'
 import { VList, VListItem } from 'vuetify/components/VList'
+import type { RouteLocationRaw } from 'vue-router'
+
+interface SearchResultItem {
+  icon: string
+  title: string
+  url: RouteLocationRaw
+}
+
+interface SearchResultGroup {
+  title: string
+  children: SearchResultItem[]
+}
 
 interface Emit {
   (e: 'update:isDialogVisible', value: boolean): void
@@ -9,7 +21,7 @@ interface Emit {
 
 interface Props {
   isDialogVisible: boolean
-  searchResults: T[]
+  searchResults: SearchResultGroup[]
   isLoading?: boolean
 }
 

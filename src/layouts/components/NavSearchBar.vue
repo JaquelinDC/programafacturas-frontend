@@ -2,13 +2,23 @@
 import Shepherd from 'shepherd.js'
 import { withQuery } from 'ufo'
 import type { RouteLocationRaw } from 'vue-router'
-import type { SearchResults } from '@db/app-bar-search/types'
 import { useConfigStore } from '@core/stores/config'
 
 interface Suggestion {
   icon: string
   title: string
   url: RouteLocationRaw
+}
+
+interface SearchResultItem {
+  icon: string
+  title: string
+  url: RouteLocationRaw
+}
+
+interface SearchResultGroup {
+  title: string
+  children: SearchResultItem[]
 }
 
 defineOptions({
@@ -89,14 +99,14 @@ const noDataSuggestions: Suggestion[] = [
 const searchQuery = ref('')
 
 const router = useRouter()
-const searchResult = ref<SearchResults[]>([])
+const searchResult = ref<SearchResultGroup[]>([])
 
 const fetchResults = async () => {
   isLoading.value = true
 
-  const { data } = await useApi<any>(withQuery('/app-bar/search', { q: searchQuery.value }))
+  const { data } = await useApi<SearchResultGroup[]>(withQuery('/app-bar/search', { q: searchQuery.value }))
 
-  searchResult.value = data.value
+  searchResult.value = data.value ?? []
 
   // ℹ️ simulate loading: we have used setTimeout for better user experience your can remove it
   setTimeout(() => {
