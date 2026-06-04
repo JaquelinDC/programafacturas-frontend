@@ -13,6 +13,12 @@ const snackbarMsg = ref('')
 const snackbarColor = ref('success')
 const recalculandoIncidencias = ref(false)
 const filtrosStorageKey = 'programafacturas.facturas.filtros'
+const itemsPerPageStorageKey = 'programafacturas.facturas.itemsPerPage'
+const page = ref(1)
+const itemsPerPage = ref(25)
+const totalItems = ref(0)
+const itemsPerPageOptions = [10, 25, 50, 100, 250, 500, 1000]
+const selectedFacturaIds = ref<number[]>([])
 
 // ─── Filtros ──────────────────────────────────────────────────────────────────
 const filtros = ref<FacturaFiltrosRequest>({})
@@ -82,6 +88,10 @@ function guardarFiltros() {
   localStorage.setItem(filtrosStorageKey, JSON.stringify(filtros.value))
 }
 
+function guardarItemsPerPage() {
+  localStorage.setItem(itemsPerPageStorageKey, String(itemsPerPage.value))
+}
+
 function cargarFiltrosGuardados() {
   const raw = localStorage.getItem(filtrosStorageKey)
   if (!raw) return
@@ -90,6 +100,15 @@ function cargarFiltrosGuardados() {
   }
   catch {
     localStorage.removeItem(filtrosStorageKey)
+  }
+}
+
+function cargarItemsPerPageGuardado() {
+  const raw = localStorage.getItem(itemsPerPageStorageKey)
+  if (!raw) return
+  const n = Number(raw)
+  if (itemsPerPageOptions.includes(n)) {
+    itemsPerPage.value = n
   }
 }
 
@@ -111,7 +130,16 @@ async function buscar() {
     const body = sanitizarFiltros(filtros.value)
     busquedaLista.value = JSON.stringify(body)
     guardarFiltros()
-    facturas.value = await $api<FacturaProveedorDto[]>('/facturas', { query: body })
+    guardarItemsPerPage()
+    const response = await $api<{ content: FacturaProveedorDto[]; page: number; size: number; totalElements: number }>('/facturas', {
+      query: {
+        ...body,
+        page: page.value - 1,
+        size: itemsPerPage.value,
+      },
+    })
+    facturas.value = response.content
+    totalItems.value = response.totalElements
   }
   catch (e) {
     console.error(e)
@@ -125,6 +153,13 @@ async function buscar() {
 function limpiarFiltros() {
   filtros.value = {}
   localStorage.removeItem(filtrosStorageKey)
+  page.value = 1
+  buscar()
+}
+
+function cambiarItemsPerPage(nuevoValor: number) {
+  itemsPerPage.value = nuevoValor
+  page.value = 1
   buscar()
 }
 
@@ -162,6 +197,34 @@ const exportLoading = ref(false)
 const showExportDialog = ref(false)
 const exportFormat = ref('excel')
 const marcarContabilidad = ref(false)
+const procesandoCarpeta = ref(false)
+const exportMenu = ref(false)
+const accionesMenu = ref(false)
+
+const selectedFacturaIdsSet = computed(() => new Set(selectedFacturaIds.value))
+const selectedFacturasEnPagina = computed(() => facturas.value.filter(f => selectedFacturaIdsSet.value.has(f.id)))
+const allVisibleSelected = computed(() => facturas.value.length > 0 && facturas.value.every(f => selectedFacturaIdsSet.value.has(f.id)))
+const someVisibleSelected = computed(() => facturas.value.some(f => selectedFacturaIdsSet.value.has(f.id)) && !allVisibleSelected.value)
+
+function toggleFacturaSeleccionada(id: number, checked: boolean) {
+  const next = new Set(selectedFacturaIds.value)
+  if (checked) next.add(id)
+  else next.delete(id)
+  selectedFacturaIds.value = [...next]
+}
+
+function toggleSeleccionPagina(checked: boolean) {
+  const next = new Set(selectedFacturaIds.value)
+  facturas.value.forEach(f => {
+    if (checked) next.add(f.id)
+    else next.delete(f.id)
+  })
+  selectedFacturaIds.value = [...next]
+}
+
+function limpiarSeleccion() {
+  selectedFacturaIds.value = []
+}
 
 async function exportar(format: string, marcar = false) {
   exportLoading.value = true
@@ -169,7 +232,7 @@ async function exportar(format: string, marcar = false) {
     const accessToken = useCookie('accessToken').value
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
     const body = {
-      filtros: { ...filtros.value },
+      filtros: sanitizarFiltros(filtros.value),
       format,
       marcarExportacionContabilidad: marcar,
     }
@@ -227,6 +290,47 @@ async function recalcularIncidencias() {
   }
 }
 
+async function procesarCarpeta() {
+  procesandoCarpeta.value = true
+  try {
+    const result = await $api<{ ok: boolean; mensaje: string; facturasInsertadas?: number; documentosEncontrados?: number; errores?: number }>(
+      '/facturas/procesar-carpeta-json',
+      { method: 'POST' },
+    )
+    showMsg(result.mensaje, 'success')
+    await buscar()
+  }
+  catch (e) {
+    console.error(e)
+    showMsg('No se pudo procesar la carpeta', 'error')
+  }
+  finally {
+    procesandoCarpeta.value = false
+  }
+}
+
+async function reprocesarIaSeleccion() {
+  if (!selectedFacturaIds.value.length) return
+  loading.value = true
+  try {
+    const result = await $api<{ ok: boolean; procesadas: number; errores: number; mensajesError?: string[]; mensaje: string }>('/facturas/reprocesar-ia', {
+      method: 'POST',
+      body: { ids: selectedFacturaIds.value },
+    })
+    showMsg(result.mensaje, 'success')
+    if (result.mensajesError?.length)
+      console.warn('Errores reproceso IA', result.mensajesError)
+    limpiarSeleccion()
+    await buscar()
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo reprocesar con IA', 'error')
+  }
+  finally {
+    loading.value = false
+  }
+}
+
 function showMsg(msg: string, color = 'success') {
   snackbarMsg.value = msg
   snackbarColor.value = color
@@ -235,9 +339,15 @@ function showMsg(msg: string, color = 'success') {
 
 onMounted(async () => {
   entidades.value = await $api<EntidadDto[]>('/entidades?todas=true')
+  cargarItemsPerPageGuardado()
   cargarFiltrosGuardados()
   await buscar()
 })
+
+function cambiarPagina(nuevaPagina: number) {
+  page.value = nuevaPagina
+  buscar()
+}
 </script>
 
 <template>
@@ -319,6 +429,23 @@ onMounted(async () => {
             prepend-icon="tabler-refresh"
             @click="recalcularIncidencias"
           >Recalcular incidencias</VBtn>
+          <VBtn
+            size="small"
+            variant="tonal"
+            color="primary"
+            class="ms-2"
+            :loading="procesandoCarpeta"
+            prepend-icon="tabler-folder"
+            @click="procesarCarpeta"
+          >Procesar carpeta</VBtn>
+          <VBtn
+            to="/facturas/conciliacion-extracto-importe"
+            size="small"
+            variant="tonal"
+            color="success"
+            class="ms-2"
+            prepend-icon="tabler-arrows-exchange"
+          >Conciliar por importe</VBtn>
         </div>
       </VCardText>
     </VCard>
@@ -492,48 +619,68 @@ onMounted(async () => {
           <VBtn
             size="small"
             variant="tonal"
-            color="primary"
-            prepend-icon="tabler-upload"
+            color="secondary"
+            prepend-icon="tabler-sparkles"
             class="me-1"
-            @click="router.push('/facturas/subir-ticket')"
-          >Subir ticket</VBtn>
+            :disabled="!selectedFacturaIds.length"
+            @click="reprocesarIaSeleccion"
+          >Reanalizar con IA</VBtn>
+          <VMenu v-model="accionesMenu" location="bottom end">
+            <template #activator="{ props }">
+              <VBtn
+                v-bind="props"
+                size="small"
+                variant="tonal"
+                color="primary"
+                prepend-icon="tabler-dots-vertical"
+                class="me-1"
+              >Acciones</VBtn>
+            </template>
+            <VList density="compact" min-width="220">
+              <VListItem
+                prepend-icon="tabler-upload"
+                title="Subir ticket"
+                @click="router.push('/facturas/subir-ticket')"
+              />
+              <VListItem
+                prepend-icon="tabler-sparkles"
+                title="Reanalizar con IA"
+                :disabled="!selectedFacturaIds.length"
+                @click="reprocesarIaSeleccion"
+              />
+              <VListItem
+                prepend-icon="tabler-refresh"
+                title="Recalcular incidencias"
+                :disabled="recalculandoIncidencias"
+                @click="recalcularIncidencias"
+              />
+              <VListItem
+                prepend-icon="tabler-folder"
+                title="Procesar carpeta"
+                :disabled="procesandoCarpeta"
+                @click="procesarCarpeta"
+              />
+            </VList>
+          </VMenu>
 
-          <!-- Export buttons -->
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="success"
-            prepend-icon="tabler-table-export"
-            :loading="exportLoading"
-            class="me-1"
-            @click="exportar('excel')"
-          >Excel</VBtn>
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="success"
-            prepend-icon="tabler-receipt-tax"
-            :loading="exportLoading"
-            class="me-1"
-            @click="exportar('excel_fiscal')"
-          >Excel fiscal</VBtn>
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="success"
-            prepend-icon="tabler-receipt"
-            :loading="exportLoading"
-            class="me-1"
-            @click="exportar('excel_tickets')"
-          >Tickets contable</VBtn>
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="info"
-            prepend-icon="tabler-file-check"
-            :loading="exportLoading"
-            @click="showExportDialog = true"
-          >Export. contabilidad</VBtn>
+          <VMenu v-model="exportMenu" location="bottom end">
+            <template #activator="{ props }">
+              <VBtn
+                v-bind="props"
+                size="small"
+                variant="tonal"
+                color="success"
+                prepend-icon="tabler-table-export"
+                :loading="exportLoading"
+              >Exportar</VBtn>
+            </template>
+            <VList density="compact" min-width="240">
+              <VListItem prepend-icon="tabler-table-export" title="Excel" @click="exportar('excel')" />
+              <VListItem prepend-icon="tabler-receipt-tax" title="Excel fiscal" @click="exportar('excel_fiscal')" />
+              <VListItem prepend-icon="tabler-receipt" title="Tickets contable" @click="exportar('excel_tickets')" />
+              <VListItem prepend-icon="tabler-file-check" title="Export. contabilidad" @click="showExportDialog = true" />
+            </VList>
+          </VMenu>
         </template>
       </VCardItem>
 
@@ -542,9 +689,24 @@ onMounted(async () => {
         :items="facturas"
         :loading="loading"
         item-value="id"
+        show-select
         hover
         @click:row="(_: any, { item }: any) => router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })"
       >
+        <template #header.data-table-select>
+          <VCheckboxBtn
+            :model-value="allVisibleSelected"
+            :indeterminate="someVisibleSelected"
+            @update:model-value="(value: boolean) => toggleSeleccionPagina(value)"
+          />
+        </template>
+        <template #item.data-table-select="{ item }">
+          <VCheckboxBtn
+            :model-value="selectedFacturaIdsSet.has(item.id)"
+            @click.stop
+            @update:model-value="(value: boolean) => toggleFacturaSeleccionada(item.id, value)"
+          />
+        </template>
         <template #item.tipo="{ item }">
           <VChip
             v-if="item.tipo"
@@ -593,6 +755,24 @@ onMounted(async () => {
           </div>
         </template>
       </VDataTable>
+
+      <div class="d-flex justify-end align-center gap-4 px-4 pb-2 pt-4 flex-wrap">
+        <span class="text-body-2 text-disabled">Filas por página</span>
+        <AppSelect
+          :model-value="itemsPerPage"
+          :items="itemsPerPageOptions.map(value => ({ title: String(value), value }))"
+          density="compact"
+          style="max-width: 110px"
+          @update:model-value="(value: number | string | null) => cambiarItemsPerPage(Number(value))"
+        />
+      </div>
+
+      <TablePagination
+        :page="page"
+        :items-per-page="itemsPerPage"
+        :total-items="totalItems"
+        @update:page="cambiarPagina"
+      />
     </VCard>
 
     <!-- Leyenda de estados -->

@@ -19,12 +19,27 @@ export default [
     icon: { icon: 'tabler-file-text' },
   },
 
-  // ─── Extractos ─────────────────────────────────────────────────────────────
+  // ─── Bancario ──────────────────────────────────────────────────────────────
   { heading: 'Bancario' },
+  {
+    title: 'Pagos',
+    to: { name: 'pagos' },
+    icon: { icon: 'tabler-receipt-2' },
+  },
   {
     title: 'Extractos Bancarios',
     to: { name: 'extractos' },
     icon: { icon: 'tabler-building-bank' },
+  },
+  {
+    title: 'Conceptos No Conciliables',
+    to: { name: 'pagos-conciliacion-conceptos' },
+    icon: { icon: 'tabler-ban' },
+  },
+  {
+    title: 'Movimientos Bancarios',
+    to: { name: 'pagos-movimientos-bancarios' },
+    icon: { icon: 'tabler-list-search' },
   },
 
   // ─── Maestros ──────────────────────────────────────────────────────────────

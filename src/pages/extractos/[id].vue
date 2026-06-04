@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import type { ExtractoBancarioDto, ExtractoBancarioMovimientoDto } from '@/types/api'
+import type { ExtractoBancarioDto, ExtractoBancarioMovimientoDto, RemesaDomiciliacionDto } from '@/types/api'
 import { $api } from '@/utils/api'
 
 definePage({ meta: { title: 'Detalle Extracto Bancario' } })
 
 const route = useRoute()
 const router = useRouter()
-const id = computed(() => route.params.id as string)
+const id = computed(() => (route.params as { id: string }).id)
 
 const extracto = ref<ExtractoBancarioDto | null>(null)
 const movimientos = ref<ExtractoBancarioMovimientoDto[]>([])
 const loading = ref(false)
 const soloPendientes = ref(false)
+const downloadLoading = ref(false)
+const conceptLoadingIds = ref<number[]>([])
+const remesaDialog = ref(false)
+const remesaLoading = ref(false)
+const remesaUploading = ref(false)
+const currentRemesaMovimiento = ref<ExtractoBancarioMovimientoDto | null>(null)
+const remesaLines = ref<RemesaDomiciliacionDto[]>([])
+const remesaFile = ref<File | null>(null)
 
 const snackbar = ref(false)
 const snackbarMsg = ref('')
@@ -21,6 +29,35 @@ function showMsg(msg: string, color: 'success' | 'error' = 'success') {
   snackbarMsg.value = msg
   snackbarColor.value = color
   snackbar.value = true
+}
+
+async function descargarExcel() {
+  if (!extracto.value) return
+  downloadLoading.value = true
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/extractos/${id.value}/excel`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (!response.ok) {
+      showMsg('No se pudo descargar el Excel', 'error')
+      return
+    }
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = extracto.value.nombreFichero || `extracto-${id.value}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  catch {
+    showMsg('No se pudo descargar el Excel', 'error')
+  }
+  finally {
+    downloadLoading.value = false
+  }
 }
 
 async function cargarMovimientos() {
@@ -45,6 +82,94 @@ async function toggleExcluido(mov: ExtractoBancarioMovimientoDto) {
   }
   catch {
     showMsg('Error al actualizar el movimiento', 'error')
+  }
+}
+
+async function marcarNoConciliable(mov: ExtractoBancarioMovimientoDto) {
+  if (conceptLoadingIds.value.includes(mov.id)) return
+  conceptLoadingIds.value.push(mov.id)
+  try {
+    const updated = await $api<ExtractoBancarioMovimientoDto>(
+      `/extractos/${id.value}/movimientos/${mov.id}/concepto-no-conciliable`,
+      { method: 'POST' },
+    )
+    const idx = movimientos.value.findIndex(m => m.id === mov.id)
+    if (idx >= 0) movimientos.value[idx] = updated
+    showMsg('Concepto añadido a la lista de no conciliables')
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo marcar como no conciliable', 'error')
+  }
+  finally {
+    conceptLoadingIds.value = conceptLoadingIds.value.filter(id => id !== mov.id)
+  }
+}
+
+function abrirRemesa(mov: ExtractoBancarioMovimientoDto) {
+  currentRemesaMovimiento.value = mov
+  remesaFile.value = null
+  remesaLines.value = []
+  remesaDialog.value = true
+  cargarRemesa()
+}
+
+function onRemesaFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  remesaFile.value = target.files?.[0] ?? null
+}
+
+async function cargarRemesa() {
+  if (!currentRemesaMovimiento.value) return
+  remesaLoading.value = true
+  try {
+    remesaLines.value = await $api<RemesaDomiciliacionDto[]>(
+      `/pagos/extractos/${id.value}/movimientos/${currentRemesaMovimiento.value.id}/remesa-q19`,
+    )
+  }
+  finally {
+    remesaLoading.value = false
+  }
+}
+
+async function subirRemesa() {
+  if (!currentRemesaMovimiento.value || !remesaFile.value) return
+  remesaUploading.value = true
+  try {
+    const form = new FormData()
+    form.append('ficheroQ19', remesaFile.value)
+    await $api(`/pagos/extractos/${id.value}/movimientos/${currentRemesaMovimiento.value.id}/remesa-q19`, {
+      method: 'POST',
+      body: form,
+    })
+    await cargarRemesa()
+    await cargarMovimientos()
+    showMsg('Q19 importado correctamente')
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo importar el Q19', 'error')
+  }
+  finally {
+    remesaUploading.value = false
+  }
+}
+
+async function conciliarAutoRemesa() {
+  if (!currentRemesaMovimiento.value) return
+  remesaUploading.value = true
+  try {
+    const res = await $api<{ mensaje: string; conciliadas: number }>(
+      `/pagos/extractos/${id.value}/movimientos/${currentRemesaMovimiento.value.id}/remesa-q19/conciliar-auto`,
+      { method: 'POST' },
+    )
+    showMsg(res.mensaje)
+    await cargarRemesa()
+    await cargarMovimientos()
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo conciliar automáticamente', 'error')
+  }
+  finally {
+    remesaUploading.value = false
   }
 }
 
@@ -74,6 +199,7 @@ const headers = [
   { title: 'Importe', key: 'importe', width: 120 },
   { title: 'Estado', key: 'estado', sortable: false, width: 170 },
   { title: 'Factura', key: 'facturaProveedorNumero', width: 110 },
+  { title: 'Acciones', key: 'acciones', sortable: false, width: 240 },
   { title: 'Excluir', key: 'excluir', sortable: false, width: 80 },
 ]
 
@@ -110,6 +236,14 @@ onMounted(async () => {
           Periodo: {{ formatDate(extracto.fechaInicioMovimientos) }} → {{ formatDate(extracto.fechaFinMovimientos) }}
         </span>
       </div>
+      <VBtn
+        v-if="extracto.nombreFichero"
+        variant="tonal"
+        :loading="downloadLoading"
+        @click="descargarExcel"
+      >
+        Descargar Excel
+      </VBtn>
     </div>
 
     <!-- Movimientos -->
@@ -185,6 +319,27 @@ onMounted(async () => {
           <span v-else class="text-disabled">—</span>
         </template>
 
+        <template #item.acciones="{ item }">
+          <div class="d-flex gap-2 flex-wrap">
+            <VBtn
+              variant="text"
+              size="small"
+              :loading="conceptLoadingIds.includes(item.id)"
+              @click="marcarNoConciliable(item)"
+            >
+              No conciliable
+            </VBtn>
+            <VBtn
+              v-if="item.concepto?.toUpperCase().includes('REMESA') || item.concepto?.toUpperCase().includes('RECIBO')"
+              variant="text"
+              size="small"
+              @click="abrirRemesa(item)"
+            >
+              Remesa / Q19
+            </VBtn>
+          </div>
+        </template>
+
         <template #item.excluir="{ item }">
           <VTooltip
             :text="item.excluidoConciliacion ? 'Incluir en conciliación' : 'Excluir de conciliación'"
@@ -210,4 +365,49 @@ onMounted(async () => {
   <VSnackbar v-model="snackbar" :color="snackbarColor" location="bottom end">
     {{ snackbarMsg }}
   </VSnackbar>
+
+  <VDialog v-model="remesaDialog" max-width="1100">
+    <VCard>
+      <VCardTitle class="d-flex align-center justify-space-between">
+        <span>Remesa / Q19</span>
+        <DialogCloseBtn @click="remesaDialog = false" />
+      </VCardTitle>
+      <VCardText>
+        <VRow>
+          <VCol cols="12" md="4">
+            <div class="d-flex flex-column gap-2">
+              <label class="text-body-2">Fichero Q19</label>
+              <input type="file" @change="onRemesaFileChange">
+            </div>
+          </VCol>
+          <VCol cols="12" md="8" class="d-flex align-end gap-2 justify-end">
+            <VBtn variant="tonal" :loading="remesaLoading" @click="cargarRemesa">Recargar</VBtn>
+            <VBtn :loading="remesaUploading" @click="subirRemesa">Importar Q19</VBtn>
+            <VBtn color="primary" :loading="remesaUploading" @click="conciliarAutoRemesa">Conciliar automático</VBtn>
+          </VCol>
+        </VRow>
+
+        <VDataTable
+          :headers="[
+            { title: 'Orden', key: 'ordenLinea', width: 80 },
+            { title: 'CIF', key: 'cifDeudor', width: 120 },
+            { title: 'Deudor', key: 'nombreDeudor' },
+            { title: 'Importe', key: 'importe', width: 110 },
+            { title: 'Factura', key: 'numeroFacturaQ19', width: 120 },
+            { title: 'Vinculada', key: 'facturaEmitidaId', width: 100 },
+          ]"
+          :items="remesaLines"
+          :loading="remesaLoading"
+          density="compact"
+          class="mt-4"
+        >
+          <template #item.importe="{ item }">{{ formatMoney(item.importe) }}</template>
+          <template #item.facturaEmitidaId="{ item }">
+            <span v-if="item.facturaEmitidaId">#{{ item.facturaEmitidaId }}</span>
+            <span v-else class="text-disabled">—</span>
+          </template>
+        </VDataTable>
+      </VCardText>
+    </VCard>
+  </VDialog>
 </template>

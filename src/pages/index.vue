@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useAuthStore } from '@/stores/auth';
+import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
 </script>
@@ -76,6 +76,38 @@ const authStore = useAuthStore()
               <p class="text-body-2 mb-0">Proveedores</p>
               <RouterLink :to="{ name: 'proveedores' }" class="text-h6 text-warning text-decoration-none">
                 Ver listado
+              </RouterLink>
+            </div>
+          </VCardText>
+        </VCard>
+      </VCol>
+
+      <VCol cols="12" sm="6" lg="3">
+        <VCard>
+          <VCardText class="d-flex align-center gap-4">
+            <VAvatar color="primary" variant="tonal" size="42" rounded>
+              <VIcon icon="tabler-receipt-2" />
+            </VAvatar>
+            <div>
+              <p class="text-body-2 mb-0">Pagos</p>
+              <RouterLink :to="{ name: 'pagos' }" class="text-h6 text-primary text-decoration-none">
+                Flujo bancario
+              </RouterLink>
+            </div>
+          </VCardText>
+        </VCard>
+      </VCol>
+
+      <VCol cols="12" sm="6" lg="3">
+        <VCard>
+          <VCardText class="d-flex align-center gap-4">
+            <VAvatar color="secondary" variant="tonal" size="42" rounded>
+              <VIcon icon="tabler-ban" />
+            </VAvatar>
+            <div>
+              <p class="text-body-2 mb-0">Conciliación</p>
+              <RouterLink :to="{ name: 'pagos-conciliacion-conceptos' }" class="text-h6 text-secondary text-decoration-none">
+                Conceptos no conciliables
               </RouterLink>
             </div>
           </VCardText>

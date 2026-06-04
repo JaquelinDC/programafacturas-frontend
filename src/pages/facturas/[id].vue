@@ -12,7 +12,7 @@ definePage({ meta: { title: 'Detalle Factura Proveedor' } })
 
 const route = useRoute()
 const router = useRouter()
-const id = computed(() => route.params.id as string)
+const id = computed(() => (route.params as { id: string }).id)
 const listadoTarget = computed(() => ({ path: '/facturas', query: route.query.q ? { q: route.query.q } : undefined }))
 
 // ─── State ────────────────────────────────────────────────────────────────────

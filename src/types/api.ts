@@ -133,6 +133,29 @@ export interface FacturaProveedorDto {
   lineasIva: IvaLineaDto[]
 }
 
+export interface FacturaConciliacionImporteMovimientoDto {
+  movimientoId: number
+  extractoId?: number
+  extractoEtiqueta?: string
+  fechaMovimiento?: string
+  concepto?: string
+  importe?: number
+  conceptoOk: boolean
+  facturaProveedorId?: number
+  facturaProveedorNumero?: string
+}
+
+export interface FacturaConciliacionImporteDto {
+  facturaId: number
+  facturaNumero?: string
+  facturaFecha?: string
+  proveedorNombre?: string
+  importeTotal?: number
+  libreParaConciliacion: boolean
+  movimientoConceptoOk: boolean
+  movimientos: FacturaConciliacionImporteMovimientoDto[]
+}
+
 export interface FacturaEmitidaDto {
   id: number
   numeroFactura?: string
@@ -142,9 +165,22 @@ export interface FacturaEmitidaDto {
   importe?: number
   baseImponible?: number
   iva?: number
+  rutaDocumento?: string
   clienteId?: number
   clienteNombre?: string
   clienteCif?: string
+}
+
+export interface FacturaEmitidaDraftDto {
+  numeroFactura?: string
+  fechaFactura?: string
+  clienteNombre?: string
+  clienteCif?: string
+  referencia?: string
+  formaPago?: string
+  importe?: number
+  baseImponible?: number
+  iva?: number
 }
 
 // ─── Extractos ───────────────────────────────────────────────────────────────
@@ -158,6 +194,8 @@ export interface ExtractoBancarioDto {
   fechaInicioMovimientos?: string
   fechaFinMovimientos?: string
   nombreFichero?: string
+  movimientosConciliados: number
+  movimientosTotales: number
 }
 
 export interface ExtractoBancarioMovimientoDto {
@@ -173,6 +211,57 @@ export interface ExtractoBancarioMovimientoDto {
   pagoId?: number
   facturaProveedorId?: number
   facturaProveedorNumero?: string
+}
+
+export interface ConceptoNoConciliableDto {
+  id: number
+  texto: string
+  activo: boolean
+}
+
+export interface MovimientoBancarioAdminDto {
+  id: number
+  extractoId?: number
+  banco?: string
+  nombreFichero?: string
+  fechaSubida?: string
+  fechaMovimiento?: string
+  concepto?: string
+  observaciones?: string
+  importe?: number
+  excluidoConciliacion: boolean
+  conceptoNoConciliable: boolean
+  pagoId?: number
+  facturaProveedorId?: number
+  facturaProveedorNumero?: string
+}
+
+export interface PagoDto {
+  id: number
+  tipoPagoId?: number
+  tipoPagoNombre?: string
+  fechaPago?: string
+  importePago?: number
+  facturasProveedorIds: number[]
+  facturasProveedorNumeros: string[]
+}
+
+export interface RemesaDomiciliacionDto {
+  ordenLinea: number
+  cifDeudor?: string
+  nombreDeudor?: string
+  importe?: number
+  textoLinea?: string
+  numeroFacturaQ19?: string
+  facturaEmitidaId?: number
+}
+
+export interface ImportacionExtractoResponse {
+  ok: boolean
+  extractoId: number
+  movimientosGuardados: number
+  filasIgnoradas: number
+  mensaje: string
 }
 
 // ─── Filtros ─────────────────────────────────────────────────────────────────
