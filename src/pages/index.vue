@@ -1,114 +1,117 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
 
+definePage({ meta: { title: 'Inicio' } })
+
 const authStore = useAuthStore()
+
+const blocks = [
+  {
+    title: 'Operativa diaria',
+    description: 'Facturas proveedor, facturas emitidas y acciones de carga.',
+    icon: 'tabler-file-invoice',
+    color: 'primary',
+    links: [
+      { label: 'Facturas proveedor', to: { name: 'facturas' } },
+      { label: 'Facturas emitidas', to: { name: 'facturas-emitidas' } },
+      { label: 'Subir ticket', to: { name: 'facturas-subir-ticket' } },
+    ],
+  },
+  {
+    title: 'Conciliación bancaria',
+    description: 'Pagos, extractos y movimientos para el trabajo diario.',
+    icon: 'tabler-building-bank',
+    color: 'success',
+    links: [
+      { label: 'Pagos', to: { name: 'pagos' } },
+      { label: 'Extractos', to: { name: 'extractos' } },
+      { label: 'Movimientos bancarios', to: { name: 'pagos-movimientos-bancarios' } },
+    ],
+  },
+  {
+    title: 'Maestros',
+    description: 'Catálogos de soporte para el resto de la operativa.',
+    icon: 'tabler-database',
+    color: 'warning',
+    links: [
+      { label: 'Proveedores', to: { name: 'proveedores' } },
+      { label: 'Clientes', to: { name: 'clientes' } },
+      { label: 'Entidades', to: { name: 'entidades' } },
+    ],
+  },
+  {
+    title: 'Administración',
+    description: 'Gestión de usuarios y acceso administrativo.',
+    icon: 'tabler-shield-lock',
+    color: 'error',
+    links: [
+      { label: 'Usuarios', to: { name: 'usuarios' } },
+    ],
+  },
+]
 </script>
 
 <template>
   <div>
     <VCard class="mb-6">
-      <VCardText>
-        <h4 class="text-h4 mb-1">
-          Bienvenido, {{ authStore.nombreCompleto || authStore.username }} 👋
-        </h4>
-        <p class="text-body-1 mb-0">
-          Panel de gestión de facturas TRACOM
-        </p>
+      <VCardText class="d-flex flex-wrap align-center justify-space-between gap-4">
+        <div>
+          <h4 class="text-h4 mb-1">
+            Bienvenido, {{ authStore.nombreCompleto || authStore.username }}
+          </h4>
+          <p class="text-body-1 mb-0">
+            Panel operativo de facturación y conciliación
+          </p>
+        </div>
+        <VChip
+          color="primary"
+          variant="tonal"
+          label
+        >
+          Prioridad: facturas y pagos
+        </VChip>
       </VCardText>
     </VCard>
 
     <VRow>
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="primary" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-file-invoice" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Facturas Proveedores</p>
-              <RouterLink :to="{ name: 'facturas' }" class="text-h6 text-primary text-decoration-none">
-                Ver listado
-              </RouterLink>
+      <VCol
+        v-for="block in blocks"
+        :key="block.title"
+        cols="12"
+        md="6"
+        lg="3"
+      >
+        <VCard class="h-100">
+          <VCardText class="d-flex flex-column gap-4 h-100">
+            <div class="d-flex align-center gap-3">
+              <VAvatar
+                :color="block.color"
+                variant="tonal"
+                size="42"
+                rounded
+              >
+                <VIcon :icon="block.icon" />
+              </VAvatar>
+              <div>
+                <h5 class="text-h6 mb-1">
+                  {{ block.title }}
+                </h5>
+                <p class="text-body-2 mb-0">
+                  {{ block.description }}
+                </p>
+              </div>
             </div>
-          </VCardText>
-        </VCard>
-      </VCol>
 
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="success" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-file-text" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Facturas Emitidas</p>
-              <RouterLink :to="{ name: 'facturas-emitidas' }" class="text-h6 text-success text-decoration-none">
-                Ver listado
-              </RouterLink>
-            </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="info" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-building-bank" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Extractos Bancarios</p>
-              <RouterLink :to="{ name: 'extractos' }" class="text-h6 text-info text-decoration-none">
-                Ver listado
-              </RouterLink>
-            </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="warning" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-truck" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Proveedores</p>
-              <RouterLink :to="{ name: 'proveedores' }" class="text-h6 text-warning text-decoration-none">
-                Ver listado
-              </RouterLink>
-            </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="primary" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-receipt-2" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Pagos</p>
-              <RouterLink :to="{ name: 'pagos' }" class="text-h6 text-primary text-decoration-none">
-                Flujo bancario
-              </RouterLink>
-            </div>
-          </VCardText>
-        </VCard>
-      </VCol>
-
-      <VCol cols="12" sm="6" lg="3">
-        <VCard>
-          <VCardText class="d-flex align-center gap-4">
-            <VAvatar color="secondary" variant="tonal" size="42" rounded>
-              <VIcon icon="tabler-ban" />
-            </VAvatar>
-            <div>
-              <p class="text-body-2 mb-0">Conciliación</p>
-              <RouterLink :to="{ name: 'pagos-conciliacion-conceptos' }" class="text-h6 text-secondary text-decoration-none">
-                Conceptos no conciliables
-              </RouterLink>
+            <div class="d-flex flex-column gap-2 mt-auto">
+              <VBtn
+                v-for="link in block.links"
+                :key="link.label"
+                :to="link.to"
+                variant="tonal"
+                block
+              >
+                {{ link.label }}
+              </VBtn>
             </div>
           </VCardText>
         </VCard>

@@ -1,82 +1,121 @@
 <script setup lang="ts">
 definePage({ meta: { title: 'Pagos' } })
+
+const blocks = [
+  {
+    title: 'Pagos registrados',
+    description: 'Listado de pagos dados de alta en la aplicación.',
+    icon: 'tabler-receipt',
+    color: 'primary',
+    to: '/pagos/registrados',
+  },
+  {
+    title: 'Alta y edición',
+    description: 'Crear, revisar y mantener pagos manuales.',
+    icon: 'tabler-cash',
+    color: 'success',
+    to: '/pagos/manual',
+  },
+  {
+    title: 'Movimientos bancarios',
+    description: 'Vista administrativa global de apuntes y enlaces.',
+    icon: 'tabler-list-search',
+    color: 'info',
+    to: '/pagos/movimientos-bancarios',
+  },
+  {
+    title: 'Conciliación',
+    description: 'Conceptos no conciliables y flujo de ayuda para bancos.',
+    icon: 'tabler-ban',
+    color: 'warning',
+    links: [
+      { label: 'Conceptos no conciliables', to: '/pagos/conciliacion-conceptos' },
+      { label: 'Extractos bancarios', to: '/extractos' },
+    ],
+  },
+]
 </script>
 
 <template>
-  <VRow>
-    <VCol cols="12" md="4">
-      <VCard>
-        <VCardText class="d-flex flex-column gap-3">
-          <VAvatar color="success" variant="tonal" size="42" rounded>
-            <VIcon icon="tabler-cash" />
-          </VAvatar>
-          <div>
-            <h5 class="text-h6 mb-1">Pagos manuales</h5>
-            <p class="text-body-2 mb-0">Alta, edición y borrado de pagos registrados.</p>
-          </div>
-          <VBtn to="/pagos/manual" variant="tonal">Abrir CRUD</VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
+  <div>
+    <VCard class="mb-6">
+      <VCardText class="d-flex flex-wrap align-center justify-space-between gap-4">
+        <div>
+          <h4 class="text-h4 mb-1">
+            Pagos
+          </h4>
+          <p class="text-body-1 mb-0">
+            Bloque operativo de conciliación, pagos y extractos
+          </p>
+        </div>
+        <VBtn
+          to="/pagos/registrados"
+          color="primary"
+        >
+          Abrir pagos registrados
+        </VBtn>
+      </VCardText>
+    </VCard>
 
-    <VCol cols="12" md="4">
-      <VCard>
-        <VCardText class="d-flex flex-column gap-3">
-          <VAvatar color="success" variant="tonal" size="42" rounded>
-            <VIcon icon="tabler-receipt" />
-          </VAvatar>
-          <div>
-            <h5 class="text-h6 mb-1">Pagos registrados</h5>
-            <p class="text-body-2 mb-0">Listado de pagos dados de alta en la app.</p>
-          </div>
-          <VBtn to="/pagos/registrados" variant="tonal">Abrir listado</VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
+    <VRow>
+      <VCol
+        v-for="block in blocks"
+        :key="block.title"
+        cols="12"
+        md="6"
+        lg="3"
+      >
+        <VCard class="h-100">
+          <VCardText class="d-flex flex-column gap-4 h-100">
+            <div class="d-flex align-center gap-3">
+              <VAvatar
+                :color="block.color"
+                variant="tonal"
+                size="42"
+                rounded
+              >
+                <VIcon :icon="block.icon" />
+              </VAvatar>
+              <div>
+                <h5 class="text-h6 mb-1">
+                  {{ block.title }}
+                </h5>
+                <p class="text-body-2 mb-0">
+                  {{ block.description }}
+                </p>
+              </div>
+            </div>
 
-    <VCol cols="12" md="4">
-      <VCard>
-        <VCardText class="d-flex flex-column gap-3">
-          <VAvatar color="info" variant="tonal" size="42" rounded>
-            <VIcon icon="tabler-building-bank" />
-          </VAvatar>
-          <div>
-            <h5 class="text-h6 mb-1">Extractos bancarios</h5>
-            <p class="text-body-2 mb-0">Importa, revisa y descarga extractos.</p>
-          </div>
-          <VBtn to="/extractos" variant="tonal">Abrir extractos</VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
+            <div
+              v-if="block.to"
+              class="mt-auto"
+            >
+              <VBtn
+                :to="block.to"
+                variant="tonal"
+                block
+              >
+                Abrir
+              </VBtn>
+            </div>
 
-    <VCol cols="12" md="4">
-      <VCard>
-        <VCardText class="d-flex flex-column gap-3">
-          <VAvatar color="warning" variant="tonal" size="42" rounded>
-            <VIcon icon="tabler-ban" />
-          </VAvatar>
-          <div>
-            <h5 class="text-h6 mb-1">Conceptos no conciliables</h5>
-            <p class="text-body-2 mb-0">Gestiona la lista negra de conceptos.</p>
-          </div>
-          <VBtn to="/pagos/conciliacion-conceptos" variant="tonal">Abrir lista</VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
-
-    <VCol cols="12" md="4">
-      <VCard>
-        <VCardText class="d-flex flex-column gap-3">
-          <VAvatar color="primary" variant="tonal" size="42" rounded>
-            <VIcon icon="tabler-list-search" />
-          </VAvatar>
-          <div>
-            <h5 class="text-h6 mb-1">Movimientos globales</h5>
-            <p class="text-body-2 mb-0">Vista administrativa de todos los apuntes.</p>
-          </div>
-          <VBtn to="/pagos/movimientos-bancarios" variant="tonal">Abrir vista</VBtn>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
+            <div
+              v-else
+              class="d-flex flex-column gap-2 mt-auto"
+            >
+              <VBtn
+                v-for="link in block.links"
+                :key="link.label"
+                :to="link.to"
+                variant="tonal"
+                block
+              >
+                {{ link.label }}
+              </VBtn>
+            </div>
+          </VCardText>
+        </VCard>
+      </VCol>
+    </VRow>
+  </div>
 </template>

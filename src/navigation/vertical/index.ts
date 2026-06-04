@@ -1,26 +1,21 @@
 export default [
-  // ─── General ──────────────────────────────────────────────────────────────
   {
     title: 'Inicio',
     to: { name: 'root' },
     icon: { icon: 'tabler-smart-home' },
   },
-
-  // ─── Facturas recibidas ────────────────────────────────────────────────────
-  { heading: 'Facturas' },
+  { heading: 'Operativa diaria' },
   {
-    title: 'Facturas Proveedores',
+    title: 'Facturas proveedor',
     to: { name: 'facturas' },
     icon: { icon: 'tabler-file-invoice' },
   },
   {
-    title: 'Facturas Emitidas',
+    title: 'Facturas emitidas',
     to: { name: 'facturas-emitidas' },
     icon: { icon: 'tabler-file-text' },
   },
-
-  // ─── Bancario ──────────────────────────────────────────────────────────────
-  { heading: 'Bancario' },
+  { heading: 'Conciliación bancaria' },
   {
     title: 'Pagos',
     to: { name: 'pagos' },
@@ -32,17 +27,15 @@ export default [
     icon: { icon: 'tabler-building-bank' },
   },
   {
-    title: 'Conceptos No Conciliables',
-    to: { name: 'pagos-conciliacion-conceptos' },
-    icon: { icon: 'tabler-ban' },
-  },
-  {
     title: 'Movimientos Bancarios',
     to: { name: 'pagos-movimientos-bancarios' },
     icon: { icon: 'tabler-list-search' },
   },
-
-  // ─── Maestros ──────────────────────────────────────────────────────────────
+  {
+    title: 'Conceptos no conciliables',
+    to: { name: 'pagos-conciliacion-conceptos' },
+    icon: { icon: 'tabler-ban' },
+  },
   { heading: 'Maestros' },
   {
     title: 'Proveedores',
@@ -74,8 +67,6 @@ export default [
     to: { name: 'codigos-cuenta-gasto' },
     icon: { icon: 'tabler-report-money' },
   },
-
-  // ─── Administración (solo ADMINISTRADOR) ───────────────────────────────────
   { heading: 'Administración' },
   {
     title: 'Usuarios',
