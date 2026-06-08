@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import type {
-    CodigoCuentaGastoDto,
-    EntidadDto,
-    FacturaProveedorDto,
-    ProveedorFacturaDto,
-    TipoPagoDto,
+  CodigoCuentaGastoDto,
+  EntidadDto,
+  FacturaProveedorDto,
+  ProveedorFacturaDto,
+  TipoPagoDto,
 } from '@/types/api'
 import { $api } from '@/utils/api'
 
@@ -265,9 +265,11 @@ onUnmounted(() => {
               <VCol cols="12" sm="6">
                 <AppTextField v-model="form.fechaFactura" label="Fecha factura" type="date" />
               </VCol>
+              <!--
               <VCol cols="12" sm="6">
                 <AppTextField v-model="form.fechaPeticionFactura" label="Fecha petición" type="date" />
               </VCol>
+            -->
               <VCol cols="12" sm="6">
                 <AppSelect
                   v-model="form.proveedorFacturaId"

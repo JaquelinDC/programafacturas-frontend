@@ -480,7 +480,7 @@ function cambiarPagina(nuevaPagina: number) {
                 <AppTextField v-model="filtros.fechaHasta" label="Fecha hasta" type="date" clearable density="compact" />
               </VCol>
 
-              <!-- Fecha petición -->
+              <!-- Fecha petición
               <VCol cols="12" class="text-overline text-disabled pb-0">Fecha petición</VCol>
               <VCol cols="12" sm="6" md="3">
                 <AppTextField v-model="filtros.fechaPeticionDesde" label="Petición desde" type="date" clearable density="compact" />
@@ -488,7 +488,7 @@ function cambiarPagina(nuevaPagina: number) {
               <VCol cols="12" sm="6" md="3">
                 <AppTextField v-model="filtros.fechaPeticionHasta" label="Petición hasta" type="date" clearable density="compact" />
               </VCol>
-
+ -->
               <!-- Fecha creación -->
               <VCol cols="12" class="text-overline text-disabled pb-0">Fecha creación en sistema</VCol>
               <VCol cols="12" sm="6" md="3">
