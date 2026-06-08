@@ -51,7 +51,7 @@ onMounted(fetchAll)
     <VCard>
       <VCardItem>
         <VCardTitle>Conceptos no conciliables</VCardTitle>
-        <VCardSubtitle>Los movimientos cuyo concepto u observaciones coinciden con esta lista se excluyen de la conciliación.</VCardSubtitle>
+        <VCardSubtitle>Si el concepto de un movimiento bancario contiene alguno de estos textos, no se propondrá conciliaciónn automática.</VCardSubtitle>
         <template #append>
           <VBtn prepend-icon="tabler-plus" @click="openCreate">Nuevo</VBtn>
         </template>

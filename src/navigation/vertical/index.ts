@@ -26,24 +26,28 @@ export default [
     to: { name: 'extractos' },
     icon: { icon: 'tabler-building-bank' },
   },
+  /*
   {
     title: 'Movimientos Bancarios',
     to: { name: 'pagos-movimientos-bancarios' },
     icon: { icon: 'tabler-list-search' },
   },
+  */
   {
     title: 'Conceptos no conciliables',
     to: { name: 'pagos-conciliacion-conceptos' },
     icon: { icon: 'tabler-ban' },
   },
   { heading: 'Maestros' },
+  /*
   {
     title: 'Proveedores',
     to: { name: 'proveedores' },
     icon: { icon: 'tabler-truck' },
   },
+  */
   {
-    title: 'Proveedores Factura',
+    title: 'Proveedores',
     to: { name: 'proveedores-factura' },
     icon: { icon: 'tabler-building-warehouse' },
   },
@@ -72,5 +76,10 @@ export default [
     title: 'Usuarios',
     to: { name: 'usuarios' },
     icon: { icon: 'tabler-user-cog' },
+  },
+  {
+    title: 'Empresas',
+    to: { name: 'admin-empresas' },
+    icon: { icon: 'tabler-building-skyscraper' },
   },
 ]

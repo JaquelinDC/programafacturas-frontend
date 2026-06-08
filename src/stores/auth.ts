@@ -7,10 +7,13 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref<string | null>(null)
   const nombreCompleto = ref<string | null>(null)
   const rol = ref<string | null>(null)
+  const empresaId = ref<number | null>(null)
+  const empresaNombre = ref<string | null>(null)
 
   // ─── Getters ─────────────────────────────────────────────────────────────────
   const isLoggedIn = computed(() => !!accessToken.value)
   const isAdmin = computed(() => rol.value === 'ADMINISTRADOR')
+  const isSuperAdmin = computed(() => rol.value === 'SUPERADMIN')
 
   // ─── Actions ──────────────────────────────────────────────────────────────────
 
@@ -24,6 +27,8 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = res.username
     nombreCompleto.value = res.nombreCompleto
     rol.value = res.rol
+    empresaId.value = res.empresaId ?? null
+    empresaNombre.value = res.empresaNombre ?? null
   }
 
   async function fetchMe(): Promise<void> {
@@ -32,6 +37,8 @@ export const useAuthStore = defineStore('auth', () => {
       username.value = res.username
       nombreCompleto.value = res.nombreCompleto
       rol.value = res.rol
+      empresaId.value = res.empresaId ?? null
+      empresaNombre.value = res.empresaNombre ?? null
     }
     catch {
       logout()
@@ -43,6 +50,8 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = null
     nombreCompleto.value = null
     rol.value = null
+    empresaId.value = null
+    empresaNombre.value = null
     const router = useRouter()
     router.push('/login')
   }
@@ -52,8 +61,11 @@ export const useAuthStore = defineStore('auth', () => {
     username,
     nombreCompleto,
     rol,
+    empresaId,
+    empresaNombre,
     isLoggedIn,
     isAdmin,
+    isSuperAdmin,
     login,
     fetchMe,
     logout,

@@ -13,7 +13,7 @@ const {
   openCreate, openEdit, openDelete, confirmDelete, save,
 } = useCrud<UsuarioDto>('/usuarios')
 
-const rolesOptions = ['ADMINISTRADOR', 'USUARIO', 'CONSULTA']
+const rolesOptions = ['SUPERADMIN', 'ADMINISTRADOR', 'ADMINISTRATIVO']
 
 const form = ref({
   username: '',
@@ -32,7 +32,7 @@ watch(dialog, open => {
       username: editingItem.value?.username ?? '',
       password: '',
       nombreCompleto: editingItem.value?.nombreCompleto ?? '',
-      rol: editingItem.value?.rol ?? 'USUARIO',
+      rol: editingItem.value?.rol ?? 'ADMINISTRATIVO',
       activo: editingItem.value?.activo ?? true,
     }
   }
@@ -58,15 +58,15 @@ const headers = [
 const search = ref('')
 
 const rolColors: Record<string, string> = {
+  SUPERADMIN: 'warning',
   ADMINISTRADOR: 'error',
-  USUARIO: 'primary',
-  CONSULTA: 'secondary',
+  ADMINISTRATIVO: 'primary',
 }
 </script>
 
 <template>
   <div>
-    <VAlert v-if="!authStore.isAdmin" type="warning" variant="tonal" class="mb-4">
+    <VAlert v-if="!authStore.isAdmin && !authStore.isSuperAdmin" type="warning" variant="tonal" class="mb-4">
       Solo los administradores pueden gestionar usuarios.
     </VAlert>
 
@@ -74,7 +74,7 @@ const rolColors: Record<string, string> = {
       <VCardItem>
         <VCardTitle>Usuarios</VCardTitle>
         <template #append>
-          <VBtn v-if="authStore.isAdmin" prepend-icon="tabler-plus" @click="openCreate">Nuevo</VBtn>
+          <VBtn v-if="authStore.isAdmin || authStore.isSuperAdmin" prepend-icon="tabler-plus" @click="openCreate">Nuevo</VBtn>
         </template>
       </VCardItem>
 
@@ -111,7 +111,7 @@ const rolColors: Record<string, string> = {
           </VChip>
         </template>
         <template #item.actions="{ item }">
-          <div v-if="authStore.isAdmin" class="d-flex gap-1">
+          <div v-if="authStore.isAdmin || authStore.isSuperAdmin" class="d-flex gap-1">
             <IconBtn size="small" @click="openEdit(item)">
               <VIcon icon="tabler-edit" />
             </IconBtn>

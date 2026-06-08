@@ -1,12 +1,5 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
-import { useGenerateImageVariant } from '@core/composable/useGenerateImageVariant'
-import authV2LoginIllustrationBorderedDark from '@images/pages/auth-v2-login-illustration-bordered-dark.png'
-import authV2LoginIllustrationBorderedLight from '@images/pages/auth-v2-login-illustration-bordered-light.png'
-import authV2LoginIllustrationDark from '@images/pages/auth-v2-login-illustration-dark.png'
-import authV2LoginIllustrationLight from '@images/pages/auth-v2-login-illustration-light.png'
-import authV2MaskDark from '@images/pages/misc-mask-dark.png'
-import authV2MaskLight from '@images/pages/misc-mask-light.png'
 import { VNodeRenderer } from '@layouts/components/VNodeRenderer'
 import { themeConfig } from '@themeConfig'
 
@@ -24,6 +17,7 @@ const route = useRoute()
 const form = ref({
   username: '',
   password: '',
+  rememberMe: false,
 })
 
 const isPasswordVisible = ref(false)
@@ -49,130 +43,181 @@ async function handleLogin() {
     isLoading.value = false
   }
 }
-
-const authThemeImg = useGenerateImageVariant(
-  authV2LoginIllustrationLight,
-  authV2LoginIllustrationDark,
-  authV2LoginIllustrationBorderedLight,
-  authV2LoginIllustrationBorderedDark,
-  true)
-
-const authThemeMask = useGenerateImageVariant(authV2MaskLight, authV2MaskDark)
 </script>
 
 <template>
-  <a href="javascript:void(0)">
-    <div class="auth-logo d-flex align-center gap-x-3">
-      <VNodeRenderer :nodes="themeConfig.app.logo" />
-      <h1 class="auth-title">
-        {{ themeConfig.app.title }}
-      </h1>
-    </div>
-  </a>
+  <div class="ai-auth">
+    <div class="ai-auth__card">
 
-  <VRow
-    no-gutters
-    class="auth-wrapper bg-surface"
-  >
-    <VCol
-      md="8"
-      class="d-none d-md-flex"
-    >
-      <div class="position-relative bg-background w-100 me-0">
-        <div
-          class="d-flex align-center justify-center w-100 h-100"
-          style="padding-inline: 6.25rem;"
-        >
-          <VImg
-            max-width="613"
-            :src="authThemeImg"
-            class="auth-illustration mt-16 mb-2"
-          />
+      <!-- Panel izquierdo: showcase IA -->
+      <div class="ai-showcase d-none d-md-flex">
+        <div class="ai-showcase__grid" />
+        <div class="ai-showcase__glow ai-showcase__glow--1" />
+        <div class="ai-showcase__glow ai-showcase__glow--2" />
+
+        <div class="ai-showcase__head">
+          <span class="ai-showcase__eyebrow">
+            <span class="ai-showcase__dot" /> Facturación con IA
+          </span>
+          <h1 class="ai-showcase__title">
+            Tus facturas, <br>
+            <span class="ai-showcase__title-accent">leídas por IA.</span>
+          </h1>
+          <p class="ai-showcase__sub">
+            Fotografía un ticket o una factura y deja que la IA extraiga
+            importes, fechas e impuestos. Tú solo revisas y apruebas.
+          </p>
         </div>
 
-        <img
-          class="auth-footer-mask flip-in-rtl"
-          :src="authThemeMask"
-          alt="auth-footer-mask"
-          height="280"
-          width="100"
-        >
-      </div>
-    </VCol>
+        <!-- Mock de documento escaneado (decorativo) -->
+        <div class="ai-scan d-flex justify-center" aria-hidden="true">
+          <div class="ai-scan__doc">
+            <div class="ai-scan__doc-head">
+              <span class="ai-scan__doc-logo" />
+              <div class="ai-scan__doc-meta">
+                <i class="ai-scan__bar" style="width: 64%" />
+                <i class="ai-scan__bar ai-scan__bar--sm" style="width: 40%" />
+              </div>
+            </div>
+            <i class="ai-scan__bar" style="width: 90%" />
+            <i class="ai-scan__bar" style="width: 78%" />
+            <i class="ai-scan__bar" style="width: 84%" />
+            <i class="ai-scan__bar ai-scan__bar--total" style="width: 52%" />
+            <div class="ai-scan__beam" />
+          </div>
 
-    <VCol
-      cols="12"
-      md="4"
-      class="auth-card-v2 d-flex align-center justify-center"
-    >
-      <VCard
-        flat
-        :max-width="500"
-        class="mt-12 mt-sm-0 pa-6"
-      >
-        <VCardText>
-          <h4 class="text-h4 mb-1">
-            Bienvenido a <span class="text-capitalize">{{ themeConfig.app.title }}</span>
-          </h4>
-          <p class="mb-0">
-            Introduce tus credenciales para acceder
+          <ul class="ai-scan__chips">
+            <li style="--i: 0">
+              <span class="ai-scan__chip-k">Total</span>
+              <span class="ai-scan__chip-v">1.248,90 €</span>
+            </li>
+            <li style="--i: 1">
+              <span class="ai-scan__chip-k">IVA 21%</span>
+              <span class="ai-scan__chip-v">216,80 €</span>
+            </li>
+            <li style="--i: 2">
+              <span class="ai-scan__chip-k">Fecha</span>
+              <span class="ai-scan__chip-v">05/06/2026</span>
+            </li>
+            <li style="--i: 3">
+              <span class="ai-scan__chip-k">NIF</span>
+              <span class="ai-scan__chip-v">B-12345678</span>
+            </li>
+          </ul>
+        </div>
+
+        <div class="ai-showcase__stats">
+          <div class="ai-showcase__stat">
+            <span class="ai-showcase__stat-val">+1,386</span>
+            <span class="ai-showcase__stat-label">facturas procesadas</span>
+          </div>
+          <div class="ai-showcase__stat-divider" />
+          <div class="ai-showcase__stat">
+            <span class="ai-showcase__stat-val">99,2%</span>
+            <span class="ai-showcase__stat-label">precisión de lectura</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel derecho: formulario -->
+      <div class="ai-form d-flex align-center justify-center">
+        <div class="ai-form__inner">
+          <a href="javascript:void(0)" class="ai-form__logo d-flex justify-center align-center gap-x-3 mb-8">
+            <VNodeRenderer :nodes="themeConfig.app.logo" />
+          </a>
+
+          <h2 class="ai-form__title">
+            Inicia sesión
+          </h2>
+          <p class="ai-form__lead">
+            Bienvenido de nuevo. Accede a tu panel de facturación.
           </p>
-        </VCardText>
-        <VCardText>
-          <VAlert
-            v-if="errorMessage"
-            type="error"
-            class="mb-4"
-            density="compact"
-            closable
-            @click:close="errorMessage = null"
-          >
-            {{ errorMessage }}
-          </VAlert>
+
+          <VExpandTransition>
+            <VAlert
+              v-if="errorMessage"
+              type="error"
+              variant="tonal"
+              class="mb-6"
+              density="compact"
+              role="alert"
+              aria-live="assertive"
+              closable
+              @click:close="errorMessage = null"
+            >
+              {{ errorMessage }}
+            </VAlert>
+          </VExpandTransition>
 
           <VForm @submit.prevent="handleLogin">
-            <VRow>
-              <!-- usuario -->
-              <VCol cols="12">
-                <AppTextField
-                  v-model="form.username"
-                  autofocus
-                  label="Usuario"
-                  placeholder="tu.usuario"
-                  :disabled="isLoading"
-                />
-              </VCol>
+            <AppTextField
+              v-model="form.username"
+              autofocus
+              label="Usuario"
+              placeholder="tu usuario"
+              prepend-inner-icon="tabler-user"
+              name="username"
+              autocomplete="username"
+              :disabled="isLoading"
+              class="mb-5"
+            />
 
-              <!-- password -->
-              <VCol cols="12">
-                <AppTextField
-                  v-model="form.password"
-                  label="Contraseña"
-                  placeholder="············"
-                  :type="isPasswordVisible ? 'text' : 'password'"
-                  :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
-                  :disabled="isLoading"
-                  @click:append-inner="isPasswordVisible = !isPasswordVisible"
-                />
+            <div class="ai-form__password-header">
+              <label class="ai-form__password-label">Contraseña</label>
+              <a href="javascript:void(0)" class="ai-form__forgot">¿Olvidaste tu contraseña?</a>
+            </div>
 
-                <div class="my-6" />
+            <AppTextField
+              v-model="form.password"
+              placeholder="············"
+              prepend-inner-icon="tabler-lock"
+              name="password"
+              autocomplete="current-password"
+              :type="isPasswordVisible ? 'text' : 'password'"
+              :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
+              :disabled="isLoading"
+              @click:append-inner="isPasswordVisible = !isPasswordVisible"
+            />
 
-                <VBtn
-                  block
-                  type="submit"
-                  :loading="isLoading"
-                >
-                  Iniciar sesión
-                </VBtn>
-              </VCol>
-            </VRow>
+            <div class="ai-form__remember mt-4">
+              <VCheckbox
+                v-model="form.rememberMe"
+                label="Mantener sesión iniciada"
+                color="primary"
+                density="compact"
+                hide-details
+              />
+            </div>
+
+            <VBtn
+              block
+              size="large"
+              type="submit"
+              class="ai-form__submit mt-6"
+              :loading="isLoading"
+            >
+              Iniciar sesión
+              <template #append>
+                <VIcon icon="tabler-arrow-right" />
+              </template>
+            </VBtn>
           </VForm>
-        </VCardText>
-      </VCard>
-    </VCol>
-  </VRow>
+
+         
+          <!--
+          <p class="ai-form__footnote">
+            <VIcon icon="tabler-shield-lock" size="16" />
+            Acceso seguro · Conexión cifrada
+          </p>
+          -->
+        </div>
+      </div>
+
+    </div>
+  </div>
 </template>
 
 <style lang="scss">
 @use "@core/scss/template/pages/page-auth";
+@use "@/assets/styles/pages/login";
 </style>

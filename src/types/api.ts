@@ -12,6 +12,8 @@ export interface AuthResponse {
   username: string
   nombreCompleto: string
   rol: string
+  empresaId: number | null
+  empresaNombre: string | null
 }
 
 // ─── Wrappers genéricos ───────────────────────────────────────────────────────
@@ -89,6 +91,17 @@ export interface UsuarioDto {
   nombreCompleto: string
   rol: string
   activo: boolean
+}
+
+export interface EmpresaDto {
+  id: number
+  nombre: string
+  cif?: string
+  codigoInterno: string
+  activa: boolean
+  creadaEn?: string
+  logoUrl?: string
+  emailContacto?: string
 }
 
 // ─── Facturas ────────────────────────────────────────────────────────────────

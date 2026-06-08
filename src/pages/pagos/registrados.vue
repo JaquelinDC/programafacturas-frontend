@@ -8,7 +8,7 @@ const loading = ref(false)
 const pagos = ref<PagoDto[]>([])
 
 const headers = [
-  { title: 'Fecha', key: 'fechaPago', width: 120 },
+  { title: 'Fecha', key: 'fechaPago', width: 200 },
   { title: 'Tipo', key: 'tipoPagoNombre', width: 180 },
   { title: 'Importe', key: 'importePago', width: 120 },
   { title: 'Facturas', key: 'facturas', sortable: false },
@@ -20,7 +20,7 @@ const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toFixed(2)}
 async function cargar() {
   loading.value = true
   try {
-    pagos.value = await $api<PagoDto[]>('/pagos/registrados')
+    pagos.value = await $api<PagoDto[]>('/pagos')
   }
   finally {
     loading.value = false
@@ -53,7 +53,7 @@ onMounted(cargar)
       <template #item.facturas="{ item }">
         <div class="d-flex flex-wrap gap-1">
           <VChip v-if="item.facturasProveedorIds.length" v-for="(num, idx) in item.facturasProveedorNumeros" :key="idx" size="small" label>
-            {{ num }}
+           <span class="font-weight-bold">#{{ item.facturasProveedorIds[idx] }}</span> <span class="text-muted"> - {{ num }}</span>
           </VChip>
           <span v-else class="text-disabled">Pendiente</span>
         </div>

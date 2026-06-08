@@ -1,5 +1,30 @@
 <script setup lang="ts">
+import type { PagoDto } from '@/types/api'
+import { $api } from '@/utils/api'
+
 definePage({ meta: { title: 'Pagos' } })
+
+const loading = ref(false)
+const pagos = ref<PagoDto[]>([])
+
+const totalPagos = computed(() => pagos.value.length)
+const totalImporte = computed(() => {
+  const suma = pagos.value.reduce((acc, p) => acc + (p.importePago ?? 0), 0)
+  return `${suma.toFixed(2)} €`
+})
+const pagosSinFactura = computed(() => pagos.value.filter(p => p.facturasProveedorIds.length === 0).length)
+
+async function cargar() {
+  loading.value = true
+  try {
+    pagos.value = await $api<PagoDto[]>('/pagos')
+  }
+  finally {
+    loading.value = false
+  }
+}
+
+onMounted(cargar)
 
 const blocks = [
   {
@@ -47,6 +72,40 @@ const blocks = [
           <p class="text-body-1 mb-0">
             Bloque operativo de conciliación, pagos y extractos
           </p>
+          <div class="d-flex flex-wrap gap-4 mt-3">
+            <div>
+              <p class="text-caption text-disabled mb-0">
+                Pagos registrados
+              </p>
+              <p class="text-h6 mb-0">
+                <VSkeletonLoader v-if="loading" type="text" width="40" />
+                <span v-else>{{ totalPagos }}</span>
+              </p>
+            </div>
+            <VDivider vertical />
+            <div>
+              <p class="text-caption text-disabled mb-0">
+                Total importe
+              </p>
+              <p class="text-h6 mb-0">
+                <VSkeletonLoader v-if="loading" type="text" width="80" />
+                <span v-else>{{ totalImporte }}</span>
+              </p>
+            </div>
+            <VDivider vertical />
+            <div>
+              <p class="text-caption text-disabled mb-0">
+                Sin factura
+              </p>
+              <p class="text-h6 mb-0">
+                <VSkeletonLoader v-if="loading" type="text" width="40" />
+                <VChip v-else-if="pagosSinFactura > 0" color="warning" size="small" label>
+                  {{ pagosSinFactura }}
+                </VChip>
+                <span v-else class="text-success">0</span>
+              </p>
+            </div>
+          </div>
         </div>
         <VBtn
           to="/pagos/registrados"

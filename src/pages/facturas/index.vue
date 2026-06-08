@@ -420,7 +420,7 @@ function cambiarPagina(nuevaPagina: number) {
 
           <VSpacer />
 
-          <!-- Acciones admin -->
+          <!-- Acciones admin 
           <VBtn
             size="small"
             variant="tonal"
@@ -446,6 +446,7 @@ function cambiarPagina(nuevaPagina: number) {
             class="ms-2"
             prepend-icon="tabler-arrows-exchange"
           >Conciliar por importe</VBtn>
+          -->
         </div>
       </VCardText>
     </VCard>
@@ -659,6 +660,11 @@ function cambiarPagina(nuevaPagina: number) {
                 title="Procesar carpeta"
                 :disabled="procesandoCarpeta"
                 @click="procesarCarpeta"
+              />
+              <VListItem
+                prepend-icon="tabler-arrows-exchange"
+                title="Conciliar por importe"
+                to="/facturas/conciliacion-extracto-importe"
               />
             </VList>
           </VMenu>

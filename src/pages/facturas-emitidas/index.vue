@@ -4,6 +4,16 @@ import { $api } from '@/utils/api'
 
 definePage({ meta: { title: 'Facturas Emitidas' } })
 
+async function descargarPlantilla() {
+  const blob = await $api<Blob>('/facturas-emitidas/plantilla-importacion', { responseType: 'blob' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'plantilla-facturas-emitidas.xlsx'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const loading = ref(false)
 const saving = ref(false)
 const deleting = ref(false)
@@ -21,6 +31,10 @@ const page = ref(1)
 const itemsPerPage = ref(25)
 const totalItems = ref(0)
 const exportMenu = ref(false)
+const importDialog = ref(false)
+const importLoading = ref(false)
+const importFile = ref<File | File[] | null>(null)
+const importResultado = ref<{ filasLeidas: number; insertadas: number; actualizadas: number; clientesNuevos: number; ignoradas: number; mensaje: string } | null>(null)
 const selectedFacturaIdsSet = computed(() => new Set(selectedIds.value))
 const allVisibleSelected = computed(() => facturas.value.length > 0 && facturas.value.every(f => selectedFacturaIdsSet.value.has(f.id)))
 const someVisibleSelected = computed(() => facturas.value.some(f => selectedFacturaIdsSet.value.has(f.id)) && !allVisibleSelected.value)
@@ -162,6 +176,30 @@ async function confirmDelete() {
   finally { deleting.value = false; deletingId.value = null }
 }
 
+function abrirImportDialog() {
+  importFile.value = null
+  importResultado.value = null
+  importDialog.value = true
+}
+
+async function importarDesdeExcel() {
+  const file = Array.isArray(importFile.value) ? importFile.value[0] : importFile.value
+  if (!file) { showMsg('Selecciona un archivo Excel', 'error'); return }
+  importLoading.value = true
+  importResultado.value = null
+  try {
+    const fd = new FormData()
+    fd.append('fichero', file)
+    const res = await $api<{ filasLeidas: number; insertadas: number; actualizadas: number; clientesNuevos: number; ignoradas: number; mensaje: string }>(
+      '/facturas-emitidas/importar', { method: 'POST', body: fd }
+    )
+    importResultado.value = res
+    await fetchAll()
+  }
+  catch (e: any) { showMsg(e?.data?.message || 'Error al importar', 'error') }
+  finally { importLoading.value = false }
+}
+
 async function deleteSelected() {
   deleting.value = true
   try {
@@ -200,6 +238,7 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
           <VMenu v-model="exportMenu" location="bottom end">
             <template #activator="{ props }"><VBtn v-bind="props" variant="tonal" class="me-2">Acciones</VBtn></template>
             <VList density="compact" min-width="220">
+              <VListItem title="Importar desde Excel (.xlsx)" prepend-icon="tabler-table-import" @click="abrirImportDialog" />
               <VListItem title="Eliminar seleccionadas" :disabled="!selectedIds.length" @click="bulkDeleteDialog = true" />
             </VList>
           </VMenu>
@@ -306,6 +345,41 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
 
     <VDialog v-model="bulkDeleteDialog" max-width="420">
       <VCard title="Eliminar seleccionadas"><VCardText>Se eliminarán {{ selectedIds.length }} facturas.</VCardText><VCardActions class="justify-end"><VBtn variant="tonal" @click="bulkDeleteDialog = false">Cancelar</VBtn><VBtn color="error" :loading="deleting" @click="deleteSelected">Eliminar</VBtn></VCardActions></VCard>
+    </VDialog>
+
+    <VDialog v-model="importDialog" max-width="520" persistent>
+      <VCard title="Importar facturas emitidas desde Excel">
+        <DialogCloseBtn @click="importDialog = false" />
+        <VCardText>
+          <VFileInput
+            v-model="importFile"
+            label="Archivo Excel (.xlsx)"
+            accept=".xlsx,.xls"
+            prepend-icon="tabler-table-import"
+            hint="Formato exportación contable (recomendado): SER. - NÚM. (A), FECHA (B), CLIENTE (C), NOMBRE (D), REFERENCIA (E), FORMA DE PAGO (F), ESTADO (G), TOTAL (H), Base imponible (I), IVA (J), N.I.F. (O). Si el cliente no existe se crea automáticamente."
+            persistent-hint
+          />
+          <div class="mt-2">
+            <VBtn variant="text" density="compact" size="small" prepend-icon="tabler-download" @click="descargarPlantilla">
+              Descargar plantilla Excel de ejemplo
+            </VBtn>
+          </div>
+          <VAlert v-if="importResultado" class="mt-4" type="success" variant="tonal" closable>
+            <div><strong>{{ importResultado.mensaje }}</strong></div>
+            <div class="mt-1 text-body-2">
+              Filas leídas: {{ importResultado.filasLeidas }} ·
+              Insertadas: {{ importResultado.insertadas }} ·
+              Actualizadas: {{ importResultado.actualizadas }} ·
+              Clientes nuevos: {{ importResultado.clientesNuevos }}
+              <span v-if="importResultado.ignoradas > 0"> · Ignoradas: {{ importResultado.ignoradas }}</span>
+            </div>
+          </VAlert>
+        </VCardText>
+        <VCardActions class="justify-end pb-4 px-6">
+          <VBtn variant="tonal" @click="importDialog = false">Cerrar</VBtn>
+          <VBtn :loading="importLoading" :disabled="!importFile" @click="importarDesdeExcel">Importar</VBtn>
+        </VCardActions>
+      </VCard>
     </VDialog>
 
     <VSnackbar v-model="snackbar" :color="snackbarColor" location="bottom end">{{ snackbarMsg }}</VSnackbar>
