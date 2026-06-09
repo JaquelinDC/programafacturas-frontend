@@ -27,7 +27,7 @@ export default [
       { title: 'Clientes', to: { name: 'clientes' } },
       { title: 'Entidades', to: { name: 'entidades' } },
       { title: 'Tipos de Pago', to: { name: 'tipos-pago' } },
-      { title: 'Cuentas de Gasto', to: { name: 'codigos-cuenta-gasto' } },
+      { title: 'Códigos de cuenta de gasto', to: { name: 'codigos-cuenta-gasto' } },
     ],
   },
   {

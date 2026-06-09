@@ -67,7 +67,7 @@ export default [
     icon: { icon: 'tabler-credit-card' },
   },
   {
-    title: 'Cuentas de Gasto',
+    title: 'Códigos de cuenta de gasto',
     to: { name: 'codigos-cuenta-gasto' },
     icon: { icon: 'tabler-report-money' },
   },

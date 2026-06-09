@@ -17,7 +17,6 @@ const route = useRoute()
 const form = ref({
   username: '',
   password: '',
-  rememberMe: false,
 })
 
 const isPasswordVisible = ref(false)
@@ -178,16 +177,6 @@ async function handleLogin() {
               :disabled="isLoading"
               @click:append-inner="isPasswordVisible = !isPasswordVisible"
             />
-
-            <div class="ai-form__remember mt-4">
-              <VCheckbox
-                v-model="form.rememberMe"
-                label="Mantener sesión iniciada"
-                color="primary"
-                density="compact"
-                hide-details
-              />
-            </div>
 
             <VBtn
               block

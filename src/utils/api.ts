@@ -12,10 +12,8 @@ export const $api = ofetch.create({
   },
   async onResponseError({ response }) {
     if (response.status === 401) {
-      const accessToken = useCookie<string | null>('accessToken')
-      accessToken.value = null
-      const router = useRouter()
-      router.push('/login')
+      useCookie<string | null>('accessToken').value = null
+      useRouter().push('/login')
     }
   },
 })

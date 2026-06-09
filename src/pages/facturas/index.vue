@@ -17,14 +17,24 @@ const itemsPerPageStorageKey = 'programafacturas.facturas.itemsPerPage'
 const page = ref(1)
 const itemsPerPage = ref(25)
 const totalItems = ref(0)
-const itemsPerPageOptions = [10, 25, 50, 100, 250, 500, 1000]
+const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
+const tableReady = ref(false)
+const itemsPerPageOptions = [
+  { title: '10', value: 10 },
+  { title: '25', value: 25 },
+  { title: '50', value: 50 },
+  { title: '100', value: 100 },
+  { title: '250', value: 250 },
+  { title: '500', value: 500 },
+  { title: '1000', value: 1000 },
+  { title: 'Todos', value: -1 },
+]
 const selectedFacturaIds = ref<number[]>([])
 
 // ─── Filtros ──────────────────────────────────────────────────────────────────
 const filtros = ref<FacturaFiltrosRequest>({})
 const busquedaLista = ref('')
 
-// Sección del buscador desplegada o no
 const expandFiltros = ref(false)
 
 const estadosOptions = [
@@ -107,19 +117,20 @@ function cargarItemsPerPageGuardado() {
   const raw = localStorage.getItem(itemsPerPageStorageKey)
   if (!raw) return
   const n = Number(raw)
-  if (itemsPerPageOptions.includes(n)) {
+  if (itemsPerPageOptions.some(o => o.value === n))
     itemsPerPage.value = n
-  }
 }
 
 // ─── Quick filters ────────────────────────────────────────────────────────────
 function aplicarFiltroRapidoTipo(tipo: string) {
   filtros.value = { ...filtros.value, tipo: tipo || undefined }
+  page.value = 1
   buscar()
 }
 
 function aplicarFiltroRapido(patch: Partial<FacturaFiltrosRequest>) {
   filtros.value = { ...filtros.value, ...patch }
+  page.value = 1
   buscar()
 }
 
@@ -131,11 +142,13 @@ async function buscar() {
     busquedaLista.value = JSON.stringify(body)
     guardarFiltros()
     guardarItemsPerPage()
+    const sort = sortBy.value[0]
     const response = await $api<{ content: FacturaProveedorDto[]; page: number; size: number; totalElements: number }>('/facturas', {
       query: {
         ...body,
         page: page.value - 1,
-        size: itemsPerPage.value,
+        size: itemsPerPage.value === -1 ? 99999 : itemsPerPage.value,
+        ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}),
       },
     })
     facturas.value = response.content
@@ -150,6 +163,11 @@ async function buscar() {
   }
 }
 
+function buscarFiltros() {
+  page.value = 1
+  buscar()
+}
+
 function limpiarFiltros() {
   filtros.value = {}
   localStorage.removeItem(filtrosStorageKey)
@@ -157,13 +175,16 @@ function limpiarFiltros() {
   buscar()
 }
 
-function cambiarItemsPerPage(nuevoValor: number) {
-  itemsPerPage.value = nuevoValor
-  page.value = 1
-  buscar()
+// Llamado por VDataTableServer cuando cambia página, tamaño o columna de ordenación
+async function handleTableOptions(options: { page: number; itemsPerPage: number; sortBy: { key: string; order: 'asc' | 'desc' }[] }) {
+  if (!tableReady.value) return
+  page.value = options.page
+  itemsPerPage.value = options.itemsPerPage
+  sortBy.value = options.sortBy ?? []
+  await buscar()
 }
 
-// ─── Totales ──────────────────────────────────────────────────────────────────
+// ─── Totales (de la página actual) ───────────────────────────────────────────
 const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importeTotal ?? 0), 0))
 const totalBase = computed(() => facturas.value.reduce((s, f) => s + (f.baseImponible ?? 0), 0))
 const totalIva = computed(() => facturas.value.reduce((s, f) => s + (f.iva ?? 0), 0))
@@ -179,18 +200,23 @@ const entidadesItems = computed(() =>
 
 // ─── Tabla ────────────────────────────────────────────────────────────────────
 const headers = [
-  { title: 'ID', key: 'id', width: 70 },
-  { title: 'Tipo', key: 'tipo', width: 110 },
-  { title: 'Fecha', key: 'fechaFactura', width: 100 },
-  { title: 'Proveedor', key: 'proveedorFacturaNombre' },
-  { title: 'Entidad', key: 'entidadNombre', width: 130 },
-  { title: 'Nº Factura', key: 'numeroFactura', width: 120 },
-  { title: 'Base', key: 'baseImponible', width: 100 },
-  { title: 'IVA', key: 'iva', width: 90 },
-  { title: 'Total', key: 'importeTotal', width: 110 },
-  { title: 'Estado', key: 'estado', width: 140 },
+  { title: 'ID', key: 'id', width: 70, sortable: true },
+  { title: 'Tipo', key: 'tipo', width: 110, sortable: true },
+  { title: 'Fecha', key: 'fechaFactura', width: 100, sortable: true },
+  { title: 'Proveedor', key: 'proveedorFacturaNombre', sortable: true },
+  { title: 'Entidad', key: 'entidadNombre', width: 130, sortable: false },
+  { title: 'Nº Factura', key: 'numeroFactura', width: 120, sortable: true },
+  { title: 'Base', key: 'baseImponible', width: 100, sortable: true },
+  { title: 'IVA', key: 'iva', width: 90, sortable: true },
+  { title: 'Total', key: 'importeTotal', width: 110, sortable: true },
   { title: '', key: 'actions', sortable: false, width: 60 },
 ]
+
+// ─── Row color by estado ──────────────────────────────────────────────────────
+function rowProps({ item }: { item: FacturaProveedorDto }) {
+  const color = estadoColor[item.estado ?? '']
+  return color ? { class: `row-estado-${color}` } : {}
+}
 
 // ─── Export ───────────────────────────────────────────────────────────────────
 const exportLoading = ref(false)
@@ -249,7 +275,6 @@ async function exportar(format: string, marcar = false) {
       return
     }
     const blob = await response.blob()
-    const ext = format.startsWith('excel') ? 'xlsx' : 'csv'
     const filename = format === 'excel_fiscal' ? 'facturas-fiscal.xlsx'
       : format === 'excel_tickets' ? 'tickets-contable.xlsx'
       : format === 'csv' ? 'facturas.csv'
@@ -260,10 +285,7 @@ async function exportar(format: string, marcar = false) {
     a.download = filename
     a.click()
     URL.revokeObjectURL(url)
-    if (marcar)
-      showMsg('Exportación completada y marcada en contabilidad', 'success')
-    else
-      showMsg('Exportación completada', 'success')
+    showMsg(marcar ? 'Exportación completada y marcada en contabilidad' : 'Exportación completada', 'success')
   }
   catch {
     showMsg('Error al exportar', 'error')
@@ -342,12 +364,8 @@ onMounted(async () => {
   cargarItemsPerPageGuardado()
   cargarFiltrosGuardados()
   await buscar()
+  tableReady.value = true
 })
-
-function cambiarPagina(nuevaPagina: number) {
-  page.value = nuevaPagina
-  buscar()
-}
 </script>
 
 <template>
@@ -419,34 +437,6 @@ function cambiarPagina(nuevaPagina: number) {
           </VChip>
 
           <VSpacer />
-
-          <!-- Acciones admin 
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="warning"
-            :loading="recalculandoIncidencias"
-            prepend-icon="tabler-refresh"
-            @click="recalcularIncidencias"
-          >Recalcular incidencias</VBtn>
-          <VBtn
-            size="small"
-            variant="tonal"
-            color="primary"
-            class="ms-2"
-            :loading="procesandoCarpeta"
-            prepend-icon="tabler-folder"
-            @click="procesarCarpeta"
-          >Procesar carpeta</VBtn>
-          <VBtn
-            to="/facturas/conciliacion-extracto-importe"
-            size="small"
-            variant="tonal"
-            color="success"
-            class="ms-2"
-            prepend-icon="tabler-arrows-exchange"
-          >Conciliar por importe</VBtn>
-          -->
         </div>
       </VCardText>
     </VCard>
@@ -463,7 +453,7 @@ function cambiarPagina(nuevaPagina: number) {
         </VCardTitle>
         <template #append>
           <VBtn size="small" variant="tonal" @click.stop="limpiarFiltros">Limpiar</VBtn>
-          <VBtn size="small" :loading="loading" class="ms-2" @click.stop="buscar">Buscar</VBtn>
+          <VBtn size="small" :loading="loading" class="ms-2" @click.stop="buscarFiltros">Buscar</VBtn>
         </template>
       </VCardItem>
 
@@ -480,7 +470,7 @@ function cambiarPagina(nuevaPagina: number) {
                 <AppTextField v-model="filtros.fechaHasta" label="Fecha hasta" type="date" clearable density="compact" />
               </VCol>
 
-              <!-- Fecha petición
+              <!-- Fecha petición -->
               <VCol cols="12" class="text-overline text-disabled pb-0">Fecha petición</VCol>
               <VCol cols="12" sm="6" md="3">
                 <AppTextField v-model="filtros.fechaPeticionDesde" label="Petición desde" type="date" clearable density="compact" />
@@ -488,7 +478,7 @@ function cambiarPagina(nuevaPagina: number) {
               <VCol cols="12" sm="6" md="3">
                 <AppTextField v-model="filtros.fechaPeticionHasta" label="Petición hasta" type="date" clearable density="compact" />
               </VCol>
- -->
+
               <!-- Fecha creación -->
               <VCol cols="12" class="text-overline text-disabled pb-0">Fecha creación en sistema</VCol>
               <VCol cols="12" sm="6" md="3">
@@ -602,7 +592,7 @@ function cambiarPagina(nuevaPagina: number) {
               </VCol>
 
               <VCol cols="12" class="d-flex gap-2 mt-1">
-                <VBtn :loading="loading" prepend-icon="tabler-search" @click="buscar">Buscar</VBtn>
+                <VBtn :loading="loading" prepend-icon="tabler-search" @click="buscarFiltros">Buscar</VBtn>
                 <VBtn variant="tonal" prepend-icon="tabler-x" @click="limpiarFiltros">Limpiar</VBtn>
               </VCol>
             </VRow>
@@ -616,7 +606,7 @@ function cambiarPagina(nuevaPagina: number) {
       <VCardItem>
         <VCardTitle>Facturas Proveedores</VCardTitle>
         <template #append>
-          <span class="text-body-2 text-disabled me-3">{{ facturas.length }} resultados</span>
+          <span class="text-body-2 text-disabled me-3">{{ totalItems }} resultados</span>
           <VBtn
             size="small"
             variant="tonal"
@@ -690,13 +680,20 @@ function cambiarPagina(nuevaPagina: number) {
         </template>
       </VCardItem>
 
-      <VDataTable
+      <VDataTableServer
         :headers="headers"
         :items="facturas"
+        :items-length="totalItems"
         :loading="loading"
+        :page="page"
+        :items-per-page="itemsPerPage"
+        :sort-by="sortBy"
+        :items-per-page-options="itemsPerPageOptions"
+        :row-props="rowProps"
         item-value="id"
         show-select
         hover
+        @update:options="handleTableOptions"
         @click:row="(_: any, { item }: any) => router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })"
       >
         <template #header.data-table-select>
@@ -725,16 +722,6 @@ function cambiarPagina(nuevaPagina: number) {
         <template #item.baseImponible="{ item }">{{ formatMoney(item.baseImponible) }}</template>
         <template #item.iva="{ item }">{{ formatMoney(item.iva) }}</template>
         <template #item.importeTotal="{ item }">{{ formatMoney(item.importeTotal) }}</template>
-        <template #item.estado="{ item }">
-          <VChip
-            v-if="item.estado"
-            :color="estadoColor[item.estado] ?? 'default'"
-            size="small"
-            label
-          >
-            {{ estadoLabel[item.estado] ?? item.estado }}
-          </VChip>
-        </template>
         <template #item.proveedorFacturaNombre="{ item }">
           <span>{{ item.proveedorFacturaNombre ?? '—' }}</span>
           <VTooltip v-if="item.incidencias" location="top">
@@ -750,35 +737,15 @@ function cambiarPagina(nuevaPagina: number) {
             <VIcon icon="tabler-eye" />
           </IconBtn>
         </template>
+      </VDataTableServer>
 
-        <!-- Totals footer -->
-        <template #bottom>
-          <div class="v-data-table__tr v-data-table__tr--body pa-2 d-flex justify-end gap-6 text-body-2 font-weight-bold border-t">
-            <span>{{ facturas.length }} facturas</span>
-            <span>Base: {{ formatMoney(totalBase) }}</span>
-            <span>IVA: {{ formatMoney(totalIva) }}</span>
-            <span class="text-primary">Total: {{ formatMoney(totalImporte) }}</span>
-          </div>
-        </template>
-      </VDataTable>
-
-      <div class="d-flex justify-end align-center gap-4 px-4 pb-2 pt-4 flex-wrap">
-        <span class="text-body-2 text-disabled">Filas por página</span>
-        <AppSelect
-          :model-value="itemsPerPage"
-          :items="itemsPerPageOptions.map(value => ({ title: String(value), value }))"
-          density="compact"
-          style="max-width: 110px"
-          @update:model-value="(value: number | string | null) => cambiarItemsPerPage(Number(value))"
-        />
+      <!-- Totales de la página actual -->
+      <div class="d-flex justify-end align-center gap-6 text-body-2 font-weight-bold px-4 py-2 border-t flex-wrap">
+        <span class="text-medium-emphasis font-weight-regular">{{ facturas.length }} en página · {{ totalItems }} en total</span>
+        <span>Base: {{ formatMoney(totalBase) }}</span>
+        <span>IVA: {{ formatMoney(totalIva) }}</span>
+        <span class="text-primary">Total: {{ formatMoney(totalImporte) }}</span>
       </div>
-
-      <TablePagination
-        :page="page"
-        :items-per-page="itemsPerPage"
-        :total-items="totalItems"
-        @update:page="cambiarPagina"
-      />
     </VCard>
 
     <!-- Leyenda de estados -->
@@ -837,3 +804,14 @@ function cambiarPagina(nuevaPagina: number) {
   </div>
 </template>
 
+<style scoped>
+:deep(.row-estado-warning td) { background-color: rgba(var(--v-theme-warning), 0.10) !important; }
+:deep(.row-estado-info td)    { background-color: rgba(var(--v-theme-info), 0.10) !important; }
+:deep(.row-estado-success td) { background-color: rgba(var(--v-theme-success), 0.10) !important; }
+:deep(.row-estado-primary td) { background-color: rgba(var(--v-theme-primary), 0.10) !important; }
+
+:deep(.row-estado-warning:hover td) { background-color: rgba(var(--v-theme-warning), 0.18) !important; }
+:deep(.row-estado-info:hover td)    { background-color: rgba(var(--v-theme-info), 0.18) !important; }
+:deep(.row-estado-success:hover td) { background-color: rgba(var(--v-theme-success), 0.18) !important; }
+:deep(.row-estado-primary:hover td) { background-color: rgba(var(--v-theme-primary), 0.18) !important; }
+</style>

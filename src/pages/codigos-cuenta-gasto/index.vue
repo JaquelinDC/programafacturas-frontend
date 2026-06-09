@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { useCrud } from '@/composables/useCrud'
 import type { CodigoCuentaGastoDto } from '@/types/api'
+import { $api } from '@/utils/api'
 
-definePage({ meta: { title: 'Cuentas de Gasto' } })
+definePage({ meta: { title: 'Códigos de cuenta de gasto' } })
 
 const {
   items: cuentas, loading, saving, dialog, editingItem,
   deleteDialog, snackbar, snackbarMessage, snackbarColor,
-  openCreate, openEdit, openDelete, confirmDelete, save,
+  openCreate, openEdit, openDelete, confirmDelete, save, fetchAll,
 } = useCrud<CodigoCuentaGastoDto>('/codigos-cuenta-gasto')
 
 const form = ref({ codigo: '', descripcion: '', comun: false })
@@ -31,14 +32,57 @@ const headers = [
   { title: 'Común', key: 'comun', width: 100 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
 ]
+
+// Importar desde Excel
+const importDialog = ref(false)
+const importFile = ref<File | null>(null)
+const importLoading = ref(false)
+const importMsg = ref('')
+const importSnackbar = ref(false)
+const importError = ref('')
+
+function onImportFileChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  importFile.value = target.files?.[0] ?? null
+}
+
+async function importarExcel() {
+  importMsg.value = ''
+  importError.value = ''
+  if (!importFile.value) {
+    importError.value = 'Selecciona un fichero Excel (.xlsx).'
+    return
+  }
+  importLoading.value = true
+  try {
+    const body = new FormData()
+    body.append('fichero', importFile.value)
+    const res = await $api<{ mensaje: string; insertados: number; actualizados: number; ignorados: number }>(
+      '/codigos-cuenta-gasto/importar',
+      { method: 'POST', body },
+    )
+    importMsg.value = res.mensaje
+    importSnackbar.value = true
+    importFile.value = null
+    importDialog.value = false
+    await fetchAll()
+  }
+  catch (e: any) {
+    importError.value = e?.data?.message || 'Error al importar el fichero.'
+  }
+  finally {
+    importLoading.value = false
+  }
+}
 </script>
 
 <template>
   <div>
     <VCard>
       <VCardItem>
-        <VCardTitle>Cuentas de Gasto</VCardTitle>
+        <VCardTitle>Códigos de cuenta de gasto</VCardTitle>
         <template #append>
+          <VBtn prepend-icon="tabler-file-import" variant="tonal" class="me-2" @click="importDialog = true">Importar Excel</VBtn>
           <VBtn prepend-icon="tabler-plus" @click="openCreate">Nueva</VBtn>
         </template>
       </VCardItem>
@@ -122,6 +166,30 @@ const headers = [
 
     <VSnackbar v-model="snackbar" :color="snackbarColor" location="bottom end">
       {{ snackbarMessage }}
+    </VSnackbar>
+
+    <VDialog v-model="importDialog" max-width="480" persistent>
+      <VCard title="Importar códigos desde Excel">
+        <DialogCloseBtn @click="importDialog = false" />
+        <VCardText>
+          <p class="text-body-2 mb-4">
+            El fichero debe ser un Excel (.xlsx) con columnas: <strong>codigo</strong>, <strong>descripcion</strong> y opcionalmente <strong>comun</strong> (true/false).
+          </p>
+          <div class="d-flex flex-column gap-2">
+            <label class="text-body-2">Archivo Excel (.xlsx)</label>
+            <input type="file" accept=".xlsx" @change="onImportFileChange">
+          </div>
+          <div v-if="importError" class="text-error text-body-2 mt-3">{{ importError }}</div>
+        </VCardText>
+        <VCardActions class="justify-end pt-0 pb-4 px-6">
+          <VBtn variant="tonal" @click="importDialog = false">Cancelar</VBtn>
+          <VBtn :loading="importLoading" prepend-icon="tabler-file-import" @click="importarExcel">Importar</VBtn>
+        </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <VSnackbar v-model="importSnackbar" :timeout="5000" color="success" location="bottom end">
+      {{ importMsg }}
     </VSnackbar>
   </div>
 </template>

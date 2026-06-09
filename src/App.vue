@@ -4,6 +4,7 @@ import ScrollToTop from '@core/components/ScrollToTop.vue'
 import initCore from '@core/initCore'
 import { initConfigStore, useConfigStore } from '@core/stores/config'
 import { hexToRgb } from '@core/utils/colorConverter'
+import { useAuthStore } from '@/stores/auth'
 
 const { global } = useTheme()
 
@@ -12,6 +13,11 @@ initCore()
 initConfigStore()
 
 const configStore = useConfigStore()
+
+// Rehidratar estado de usuario si hay token (p.ej. tras recargar página)
+const authStore = useAuthStore()
+if (authStore.accessToken)
+  authStore.fetchMe()
 </script>
 
 <template>

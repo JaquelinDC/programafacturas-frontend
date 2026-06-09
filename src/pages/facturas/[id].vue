@@ -7,11 +7,14 @@ import type {
   TipoPagoDto,
 } from '@/types/api'
 import { $api } from '@/utils/api'
+import { useDisplay } from 'vuetify'
 
 definePage({ meta: { title: 'Detalle Factura Proveedor' } })
 
 const route = useRoute()
 const router = useRouter()
+const { mdAndUp, smAndDown } = useDisplay()
+const { lgAndUp } = useDisplay()
 const id = computed(() => (route.params as { id: string }).id)
 const listadoTarget = computed(() => ({ path: '/facturas', query: route.query.q ? { q: route.query.q } : undefined }))
 
@@ -54,7 +57,11 @@ const form = ref({
 // PDF
 const pdfBlobUrl = ref<string | null>(null)
 const pdfLoading = ref(false)
-
+const pdfViewerUrl = computed<string | undefined>(() =>
+  pdfBlobUrl.value
+    ? `${pdfBlobUrl.value}#zoom=page-width&toolbar=0&navpanes=0`
+    : undefined
+)
 // Estado quick change
 const nuevoEstado = ref('')
 const estadoSaving = ref(false)
@@ -247,7 +254,8 @@ onUnmounted(() => {
 
     <VRow>
       <!-- Columna principal: formulario -->
-      <VCol cols="12" :md="factura.rutaPdf ? 7 : 12">
+      <VCol cols="12" md="12" :lg="factura.rutaPdf ? 7 : 12" order="2" order-lg="1">
+
         <!-- Datos básicos -->
         <VCard class="mb-4">
           <VCardItem><VCardTitle>Datos del documento</VCardTitle></VCardItem>
@@ -385,10 +393,15 @@ onUnmounted(() => {
       </VCol>
 
       <!-- Columna PDF -->
-      <VCol v-if="factura.rutaPdf" cols="12" md="5">
-        <VCard class="sticky-top" style="position: sticky; top: 80px;">
+      <VCol v-if="factura.rutaPdf" cols="12" md="12" lg="5" order="1" order-lg="2">
+
+        <VCard
+          class="pdf-card"
+          :class="{ 'pdf-card--sticky': lgAndUp }"
+        >
           <VCardItem>
             <VCardTitle>PDF Adjunto</VCardTitle>
+
             <template #append>
               <VBtn
                 v-if="pdfBlobUrl"
@@ -402,18 +415,22 @@ onUnmounted(() => {
               </VBtn>
             </template>
           </VCardItem>
+
           <VCardText class="pa-0">
             <div v-if="pdfLoading" class="d-flex justify-center pa-8">
               <VProgressCircular indeterminate />
             </div>
-            <iframe
-              v-else-if="pdfBlobUrl"
-              :src="pdfBlobUrl"
-              style="width: 100%; height: 600px; border: none;"
-              title="Factura PDF"
-            />
+
+            <div v-else-if="pdfBlobUrl" class="pdf-wrapper">
+              <iframe
+                :src="pdfViewerUrl"
+                class="pdf-iframe"
+                title="Factura PDF"
+              />
+            </div>
+
             <div v-else class="pa-4 text-body-2 text-disabled">
-              PDF no disponible en este entorno (el fichero no está en el servidor local).
+              PDF no disponible en este entorno.
             </div>
           </VCardText>
         </VCard>
@@ -425,3 +442,6 @@ onUnmounted(() => {
     {{ snackbarMsg }}
   </VSnackbar>
 </template>
+<style lang="scss" scoped>
+@use '@/assets/styles/pages/facturas/edit.scss';
+</style>

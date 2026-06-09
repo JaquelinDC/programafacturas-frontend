@@ -1,12 +1,12 @@
-import { breakpointsVuetify } from '@vueuse/core'
 import { AppContentLayoutNav, ContentWidth, FooterType, HorizontalNavType, NavbarType } from '@layouts/enums'
 import type { LayoutConfig } from '@layouts/types'
+import { breakpointsVuetify } from '@vueuse/core'
 
 export const layoutConfig: LayoutConfig = {
   app: {
     title: 'my-layout',
     logo: h('img', { src: '/src/assets/images/tracom/logoTracom.png', style: 'height: 40px' }),
-    contentWidth: ContentWidth.Boxed,
+    contentWidth: ContentWidth.Fluid,
     contentLayoutNav: AppContentLayoutNav.Vertical,
     overlayNavFromBreakpoint: breakpointsVuetify.md,
 

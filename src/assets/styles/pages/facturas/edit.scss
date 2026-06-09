@@ -1,0 +1,38 @@
+.pdf-card--sticky {
+  position: sticky;
+  top: 80px;
+}
+
+.pdf-wrapper {
+  width: 100%;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.pdf-iframe {
+  width: 100%;
+  border: none;
+  display: block;
+  height: min(72vh, 760px);
+}
+
+/* Tablet */
+@media (max-width: 1279px) {
+  .pdf-iframe {
+    height: 68vh;
+    min-height: 520px;
+  }
+}
+
+/* Móvil */
+@media (max-width: 600px) {
+  .pdf-card {
+    margin-inline: -8px;
+    border-radius: 0;
+  }
+
+  .pdf-iframe {
+    height: 72vh;
+    min-height: 480px;
+  }
+}

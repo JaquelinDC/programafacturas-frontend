@@ -10,6 +10,8 @@ export const useAuthStore = defineStore('auth', () => {
   const empresaId = ref<number | null>(null)
   const empresaNombre = ref<string | null>(null)
 
+  const router = useRouter()
+
   // ─── Getters ─────────────────────────────────────────────────────────────────
   const isLoggedIn = computed(() => !!accessToken.value)
   const isAdmin = computed(() => rol.value === 'ADMINISTRADOR')
@@ -52,7 +54,6 @@ export const useAuthStore = defineStore('auth', () => {
     rol.value = null
     empresaId.value = null
     empresaNombre.value = null
-    const router = useRouter()
     router.push('/login')
   }
 
