@@ -8,7 +8,7 @@ const router = useRouter()
 const entidades = ref<EntidadDto[]>([])
 const entidadId = ref<number | null>(null)
 const fichero = ref<File | null>(null)
-const loading = ref(false)
+const subiendo = ref(false)
 const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref<'success' | 'error'>('success')
@@ -36,23 +36,27 @@ async function subir() {
     return
   }
 
-  loading.value = true
+  subiendo.value = true
   try {
     const form = new FormData()
     form.append('entidadId', String(entidadId.value))
     form.append('fichero', fichero.value)
-    const result = await $api<{ ok: boolean; mensaje: string; ruta?: string }>('/facturas/subir-ticket', {
+    const result = await $api<{ ok: boolean; mensaje: string; id?: number }>('/facturas/subir-ticket', {
       method: 'POST',
       body: form,
     })
     showMsg(result.mensaje, 'success')
-    router.push('/facturas')
+    if (result.id) {
+      router.push(`/facturas/${result.id}`)
+    } else {
+      router.push('/facturas')
+    }
   }
   catch (e: any) {
     showMsg(e?.data?.message || 'No se pudo subir el ticket', 'error')
   }
   finally {
-    loading.value = false
+    subiendo.value = false
   }
 }
 
@@ -63,7 +67,7 @@ onMounted(async () => {
 
 <template>
   <VCard>
-    <VCardTitle class="pa-4">Subir ticket a cola</VCardTitle>
+    <VCardTitle class="pa-4">Subir ticket / factura</VCardTitle>
     <VCardText>
       <VRow>
         <VCol cols="12" md="6">
@@ -75,16 +79,25 @@ onMounted(async () => {
             <input
               type="file"
               accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,image/*,application/pdf"
+              :disabled="subiendo"
               @change="onFileChange"
             >
           </div>
         </VCol>
       </VRow>
+
+      <!-- Indicador de procesado con IA -->
+      <div v-if="subiendo" class="mt-4">
+        <VProgressLinear indeterminate color="primary" rounded />
+        <p class="text-center text-body-2 mt-2 text-medium-emphasis">
+          Estamos leyendo tu factura con IA...
+        </p>
+      </div>
     </VCardText>
     <VCardActions class="pa-4">
-      <VBtn variant="tonal" @click="router.push('/facturas')">Cancelar</VBtn>
+      <VBtn variant="tonal" :disabled="subiendo" @click="router.push('/facturas')">Cancelar</VBtn>
       <VSpacer />
-      <VBtn color="primary" :loading="loading" @click="subir">Subir</VBtn>
+      <VBtn color="primary" :loading="subiendo" :disabled="subiendo" @click="subir">Subir</VBtn>
     </VCardActions>
   </VCard>
 

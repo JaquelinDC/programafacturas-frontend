@@ -46,3 +46,6 @@ export const formatDateToMonthShort = (value: string, toTimeForCurrentDay = true
 }
 
 export const prefixWithPlus = (value: number) => value > 0 ? `+${value}` : value
+
+export const formatMoney = (n?: number | null) =>
+  n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`

@@ -30,14 +30,27 @@ const clientes = ref<ClienteDto[]>([])
 const page = ref(1)
 const itemsPerPage = ref(25)
 const totalItems = ref(0)
+const sortBy = ref<{ key: string; order: 'asc' | 'desc' }[]>([])
+const tableReady = ref(false)
 const exportMenu = ref(false)
 const importDialog = ref(false)
 const importLoading = ref(false)
 const importFile = ref<File | File[] | null>(null)
 const importResultado = ref<{ filasLeidas: number; insertadas: number; actualizadas: number; clientesNuevos: number; ignoradas: number; mensaje: string } | null>(null)
+
+const itemsPerPageOptions = [
+  { title: '10', value: 10 },
+  { title: '25', value: 25 },
+  { title: '50', value: 50 },
+  { title: '100', value: 100 },
+  { title: 'Todos', value: -1 },
+]
+
 const selectedFacturaIdsSet = computed(() => new Set(selectedIds.value))
 const allVisibleSelected = computed(() => facturas.value.length > 0 && facturas.value.every(f => selectedFacturaIdsSet.value.has(f.id)))
 const someVisibleSelected = computed(() => facturas.value.some(f => selectedFacturaIdsSet.value.has(f.id)) && !allVisibleSelected.value)
+const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importe ?? 0), 0))
+const pageCount = computed(() => itemsPerPage.value > 0 ? Math.ceil(totalItems.value / itemsPerPage.value) : 1)
 
 const filtros = ref({ numeroFactura: '', cliente: '', referencia: '', fechaDesde: '', fechaHasta: '' })
 const form = ref({ numeroFactura: '', fechaFactura: '', referencia: '', formaPago: '', importe: 0, baseImponible: 0, iva: 0, clienteId: null as number | null })
@@ -46,6 +59,21 @@ const procesandoDocumento = ref(false)
 const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref<'success' | 'error'>('success')
+
+const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
+const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
+
+const headers = [
+  { title: 'Nº Factura', key: 'numeroFactura', sortable: true, width: 130 },
+  { title: 'Fecha', key: 'fechaFactura', sortable: true, width: 110 },
+  { title: 'Cliente', key: 'clienteNombre', sortable: false, width: 200 },
+  { title: 'Referencia', key: 'referencia', sortable: false },
+  { title: 'Forma pago', key: 'formaPago', sortable: false, width: 130 },
+  { title: 'Base', key: 'baseImponible', sortable: true, width: 110 },
+  { title: 'IVA', key: 'iva', sortable: true, width: 90 },
+  { title: 'Importe', key: 'importe', sortable: true, width: 120 },
+  { title: '', key: 'actions', sortable: false, width: 120 },
+]
 
 function showMsg(msg: string, color: 'success' | 'error' = 'success') {
   snackbarMsg.value = msg
@@ -56,17 +84,6 @@ function showMsg(msg: string, color: 'success' | 'error' = 'success') {
 function limpiarFiltros() {
   filtros.value = { numeroFactura: '', cliente: '', referencia: '', fechaDesde: '', fechaHasta: '' }
   page.value = 1
-  fetchAll()
-}
-
-function cambiarItemsPerPage(valor: number) {
-  itemsPerPage.value = valor
-  page.value = 1
-  fetchAll()
-}
-
-function cambiarPagina(valor: number) {
-  page.value = valor
   fetchAll()
 }
 
@@ -83,13 +100,29 @@ function openUpload(item: FacturaEmitidaDto) { editingItem.value = { ...item }; 
 async function fetchAll() {
   loading.value = true
   try {
-    const res = await $api<PageResponse<FacturaEmitidaDto>>('/facturas-emitidas', { query: { ...filtros.value, page: page.value - 1, size: itemsPerPage.value } })
+    const sort = sortBy.value[0]
+    const res = await $api<PageResponse<FacturaEmitidaDto>>('/facturas-emitidas', {
+      query: {
+        ...filtros.value,
+        page: page.value - 1,
+        size: itemsPerPage.value === -1 ? 99999 : itemsPerPage.value,
+        ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}),
+      },
+    })
     facturas.value = res.content
     totalItems.value = res.totalElements
     if (!clientes.value.length)
       clientes.value = await $api<ClienteDto[]>('/clientes')
   }
   finally { loading.value = false }
+}
+
+async function handleTableOptions(options: { page: number; itemsPerPage: number; sortBy: { key: string; order: 'asc' | 'desc' }[] }) {
+  if (!tableReady.value) return
+  page.value = options.page
+  itemsPerPage.value = options.itemsPerPage
+  sortBy.value = options.sortBy ?? []
+  await fetchAll()
 }
 
 async function saveFactura() {
@@ -208,24 +241,15 @@ async function deleteSelected() {
     bulkDeleteDialog.value = false
     limpiarSeleccion()
     await fetchAll()
-  } catch (e: any) { showMsg(e?.data?.message || 'Error al eliminar seleccionadas', 'error') }
+  } catch (e: any) { showMsg(e?.data?.message || 'Error al eliminar', 'error') }
   finally { deleting.value = false }
 }
 
-const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
-const formatMoney = (n?: number) => n == null ? '—' : `${n.toFixed(2)} €`
-const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importe ?? 0), 0))
-
-const headers = [
-  { title: 'Nº Factura', key: 'numeroFactura', width: 140 },
-  { title: 'Fecha', key: 'fechaFactura', width: 110 },
-  { title: 'Cliente', key: 'clienteNombre' },
-  { title: 'Referencia', key: 'referencia' },
-  { title: 'Importe', key: 'importe', width: 120 },
-  { title: '', key: 'actions', sortable: false, width: 160 },
-]
-
-onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); await fetchAll() })
+onMounted(async () => {
+  clientes.value = await $api<ClienteDto[]>('/clientes')
+  await fetchAll()
+  tableReady.value = true
+})
 </script>
 
 <template>
@@ -234,7 +258,7 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
       <VCardItem>
         <VCardTitle>Facturas Emitidas</VCardTitle>
         <template #append>
-          <VBtn variant="tonal" class="me-2" @click="openCreate">Nueva</VBtn>
+          <VBtn   class="me-2" @click="openCreate">Nueva</VBtn>
           <VMenu v-model="exportMenu" location="bottom end">
             <template #activator="{ props }"><VBtn v-bind="props" variant="tonal" class="me-2">Acciones</VBtn></template>
             <VList density="compact" min-width="220">
@@ -247,16 +271,32 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
 
       <VCardText>
         <VRow dense>
-          <VCol cols="12" sm="6" md="2"><AppTextField v-model="filtros.numeroFactura" label="Nº Factura" density="compact" clearable @keyup.enter="fetchAll" /></VCol>
-          <VCol cols="12" sm="6" md="3"><AppTextField v-model="filtros.cliente" label="Cliente" density="compact" clearable @keyup.enter="fetchAll" /></VCol>
-          <VCol cols="12" sm="6" md="3"><AppTextField v-model="filtros.referencia" label="Referencia" density="compact" clearable @keyup.enter="fetchAll" /></VCol>
+          <VCol cols="12" sm="6" md="2"><AppTextField v-model="filtros.numeroFactura" label="Nº Factura" density="compact" clearable @keyup.enter="() => { page = 1; fetchAll() }" /></VCol>
+          <VCol cols="12" sm="6" md="3"><AppTextField v-model="filtros.cliente" label="Cliente" density="compact" clearable @keyup.enter="() => { page = 1; fetchAll() }" /></VCol>
+          <VCol cols="12" sm="6" md="3"><AppTextField v-model="filtros.referencia" label="Referencia" density="compact" clearable @keyup.enter="() => { page = 1; fetchAll() }" /></VCol>
           <VCol cols="6" sm="3" md="2"><AppTextField v-model="filtros.fechaDesde" label="Desde" type="date" density="compact" clearable /></VCol>
           <VCol cols="6" sm="3" md="2"><AppTextField v-model="filtros.fechaHasta" label="Hasta" type="date" density="compact" clearable /></VCol>
-          <VCol cols="12" class="d-flex gap-2"><VBtn @click="fetchAll">Buscar</VBtn><VBtn variant="tonal" @click="limpiarFiltros">Limpiar</VBtn></VCol>
+          <VCol cols="12" class="d-flex gap-2">
+            <VBtn @click="() => { page = 1; fetchAll() }">Buscar</VBtn>
+            <VBtn variant="tonal" @click="limpiarFiltros">Limpiar</VBtn>
+          </VCol>
         </VRow>
       </VCardText>
 
-      <VDataTable :headers="headers" :items="facturas" :loading="loading" item-value="id" show-select hover>
+      <VDataTableServer
+        :headers="headers"
+        :items="facturas"
+        :items-length="totalItems"
+        :loading="loading"
+        :page="page"
+        :items-per-page="itemsPerPage"
+        :sort-by="sortBy"
+        :items-per-page-options="itemsPerPageOptions"
+        item-value="id"
+        show-select
+        hover
+        @update:options="handleTableOptions"
+      >
         <template #header.data-table-select>
           <VCheckboxBtn :model-value="allVisibleSelected" :indeterminate="someVisibleSelected" @update:model-value="(v: boolean) => toggleSeleccionPagina(v)" />
         </template>
@@ -264,6 +304,8 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
           <VCheckboxBtn :model-value="selectedFacturaIdsSet.has(item.id)" @click.stop @update:model-value="(v: boolean) => toggleFacturaSeleccionada(item.id, v)" />
         </template>
         <template #item.fechaFactura="{ item }">{{ formatDate(item.fechaFactura) }}</template>
+        <template #item.baseImponible="{ item }">{{ formatMoney(item.baseImponible) }}</template>
+        <template #item.iva="{ item }">{{ formatMoney(item.iva) }}</template>
         <template #item.importe="{ item }">{{ formatMoney(item.importe) }}</template>
         <template #item.actions="{ item }">
           <div class="d-flex gap-1">
@@ -273,18 +315,39 @@ onMounted(async () => { clientes.value = await $api<ClienteDto[]>('/clientes'); 
           </div>
         </template>
         <template #bottom>
-          <div class="pa-2 d-flex justify-end gap-6 text-body-2 font-weight-bold border-t">
-            <span>{{ facturas.length }} facturas</span><span>Total: {{ formatMoney(totalImporte) }}</span>
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-4 flex-wrap gap-y-1">
+              <p class="text-disabled mb-0 text-body-2">
+                {{ paginationMeta({ page, itemsPerPage }, totalItems) }}
+              </p>
+              <div class="d-flex align-center gap-2">
+                <span class="text-disabled text-body-2">Filas por página:</span>
+                <AppSelect
+                  v-model="itemsPerPage"
+                  :items="itemsPerPageOptions"
+                  density="compact"
+                  style="width: 100px"
+                  @update:model-value="() => { page = 1; fetchAll() }"
+                />
+              </div>
+            </div>
+            <VPagination
+              v-if="itemsPerPage !== -1 && pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 7)"
+              @update:model-value="fetchAll"
+            />
+          </div>
+          <VDivider />
+          <div class="d-flex justify-end align-center gap-6 text-body-2 font-weight-bold px-4 py-2 flex-wrap">
+            <span class="text-medium-emphasis font-weight-regular">{{ facturas.length }} en página · {{ totalItems }} en total</span>
+            <span class="text-primary">Total: {{ formatMoney(totalImporte) }}</span>
           </div>
         </template>
-      </VDataTable>
-
-      <div class="d-flex justify-end align-center gap-4 px-4 pb-2 pt-4 flex-wrap">
-        <span class="text-body-2 text-disabled">Filas por página</span>
-        <AppSelect :model-value="itemsPerPage" :items="[10,25,50,100].map(v => ({ title: String(v), value: v }))" density="compact" style="max-width:110px" @update:model-value="(v: number | string | null) => cambiarItemsPerPage(Number(v))" />
-      </div>
-
-      <TablePagination :page="page" :items-per-page="itemsPerPage" :total-items="totalItems" @update:page="cambiarPagina" />
+      </VDataTableServer>
     </VCard>
 
     <VDialog v-model="dialog" max-width="640" persistent>

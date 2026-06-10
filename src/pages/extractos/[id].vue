@@ -173,9 +173,9 @@ async function conciliarAutoRemesa() {
   }
 }
 
-const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
-const formatDateTime = (d?: string) => d ? d.substring(0, 16).replace('T', ' ') : '—'
-const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toFixed(2)} €`
+const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
+const formatDateTime = (d?: string) => d ? `${d.substring(0, 10).split('-').reverse().join('-')} ${d.substring(11, 16)}` : '—'
+const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 function estadoMovimiento(mov: ExtractoBancarioMovimientoDto) {
   if (mov.excluidoConciliacion) return { label: 'Excluido', color: 'default' }
@@ -191,16 +191,19 @@ const importeColor = (n?: number) => {
 }
 
 const search = ref('')
+const page = ref(1)
+const itemsPerPage = ref(25)
+watch(search, () => { page.value = 1 })
 
 const headers = [
-  { title: 'Fecha', key: 'fechaMovimiento', width: 100 },
-  { title: 'Concepto', key: 'concepto' },
-  { title: 'Observaciones', key: 'observaciones' },
+  { title: 'Fecha', key: 'fechaMovimiento', width: 150 },
+  { title: 'Concepto', key: 'concepto', width: 500 },
+  { title: 'Observaciones', key: 'observaciones', width: 400 },
   { title: 'Importe', key: 'importe', width: 120 },
   { title: 'Estado', key: 'estado', sortable: false, width: 170 },
   { title: 'Factura', key: 'facturaProveedorNumero', width: 110 },
-  { title: 'Acciones', key: 'acciones', sortable: false, width: 240 },
-  { title: 'Excluir', key: 'excluir', sortable: false, width: 80 },
+  { title: 'Acciones', key: 'acciones', sortable: false, width: 150 },
+  { title: 'Excluir', key: 'excluir', sortable: false, width: 50 },
 ]
 
 onMounted(async () => {
@@ -281,6 +284,8 @@ onMounted(async () => {
       </VCardText>
 
       <VDataTable
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
         :headers="headers"
         :items="movimientos"
         :search="search"
@@ -357,6 +362,22 @@ onMounted(async () => {
               />
             </template>
           </VTooltip>
+        </template>
+        <template #bottom="{ pageCount }">
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-2">
+              <span class="text-disabled text-body-2">Filas por página:</span>
+              <AppSelect v-model="itemsPerPage" :items="[25, 50, 100, 250, { title: 'Todos', value: -1 }]" density="compact" style="width: 90px" />
+            </div>
+            <VPagination
+              v-if="pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 5)"
+            />
+          </div>
         </template>
       </VDataTable>
     </VCard>

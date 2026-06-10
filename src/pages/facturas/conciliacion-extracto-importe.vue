@@ -73,8 +73,8 @@ async function desconciliar(facturaId: number) {
   }
 }
 
-const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
-const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toFixed(2)} €`
+const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
+const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 onMounted(cargar)
 </script>

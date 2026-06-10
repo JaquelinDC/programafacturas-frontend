@@ -10,7 +10,7 @@ const pagos = ref<PagoDto[]>([])
 const totalPagos = computed(() => pagos.value.length)
 const totalImporte = computed(() => {
   const suma = pagos.value.reduce((acc, p) => acc + (p.importePago ?? 0), 0)
-  return `${suma.toFixed(2)} €`
+  return `${suma.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 })
 const pagosSinFactura = computed(() => pagos.value.filter(p => p.facturasProveedorIds.length === 0).length)
 

@@ -34,6 +34,7 @@ const selectedFacturaIds = ref<number[]>([])
 // ─── Filtros ──────────────────────────────────────────────────────────────────
 const filtros = ref<FacturaFiltrosRequest>({})
 const busquedaLista = ref('')
+const search = ref('')
 
 const expandFiltros = ref(false)
 
@@ -168,8 +169,19 @@ function buscarFiltros() {
   buscar()
 }
 
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(search, (val) => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    filtros.value = { ...filtros.value, search: val.trim() || undefined }
+    page.value = 1
+    buscar()
+  }, 400)
+})
+
 function limpiarFiltros() {
   filtros.value = {}
+  search.value = ''
   localStorage.removeItem(filtrosStorageKey)
   page.value = 1
   buscar()
@@ -184,14 +196,17 @@ async function handleTableOptions(options: { page: number; itemsPerPage: number;
   await buscar()
 }
 
+// ─── Paginación ───────────────────────────────────────────────────────────────
+const pageCount = computed(() => itemsPerPage.value > 0 ? Math.ceil(totalItems.value / itemsPerPage.value) : 1)
+
 // ─── Totales (de la página actual) ───────────────────────────────────────────
 const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importeTotal ?? 0), 0))
 const totalBase = computed(() => facturas.value.reduce((s, f) => s + (f.baseImponible ?? 0), 0))
 const totalIva = computed(() => facturas.value.reduce((s, f) => s + (f.iva ?? 0), 0))
 
 // ─── Formato ──────────────────────────────────────────────────────────────────
-const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
-const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toFixed(2)} €`
+const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
+const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 // ─── Entidades select ─────────────────────────────────────────────────────────
 const entidadesItems = computed(() =>
@@ -202,9 +217,9 @@ const entidadesItems = computed(() =>
 const headers = [
   { title: 'ID', key: 'id', width: 70, sortable: true },
   { title: 'Tipo', key: 'tipo', width: 110, sortable: true },
-  { title: 'Fecha', key: 'fechaFactura', width: 100, sortable: true },
-  { title: 'Proveedor', key: 'proveedorFacturaNombre', sortable: true },
-  { title: 'Entidad', key: 'entidadNombre', width: 130, sortable: false },
+  { title: 'Fecha', key: 'fechaFactura', width: 150, sortable: true },
+  { title: 'Proveedor', key: 'proveedorFacturaNombre', width: 200, sortable: true },
+  { title: 'Entidad', key: 'entidadNombre', width: 160, sortable: false },
   { title: 'Nº Factura', key: 'numeroFactura', width: 120, sortable: true },
   { title: 'Base', key: 'baseImponible', width: 100, sortable: true },
   { title: 'IVA', key: 'iva', width: 90, sortable: true },
@@ -219,6 +234,45 @@ function rowProps({ item }: { item: FacturaProveedorDto }) {
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
+const previewLoadingId = ref<number | null>(null)
+const pdfDialogOpen = ref(false)
+const pdfUrl = ref('')
+
+watch(pdfDialogOpen, open => {
+  if (!open && pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = ''
+  }
+})
+
+async function abrirVistaPrevia(item: FacturaProveedorDto) {
+  if (!item.rutaPdf) {
+    router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista.value } })
+    return
+  }
+  previewLoadingId.value = item.id
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/facturas/${item.id}/pdf`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (!response.ok) {
+      showMsg('No se pudo cargar el documento', 'error')
+      return
+    }
+    const blob = await response.blob()
+    pdfUrl.value = URL.createObjectURL(blob)
+    pdfDialogOpen.value = true
+  }
+  catch {
+    showMsg('No se pudo cargar el documento', 'error')
+  }
+  finally {
+    previewLoadingId.value = null
+  }
+}
+
 const exportLoading = ref(false)
 const showExportDialog = ref(false)
 const exportFormat = ref('excel')
@@ -680,6 +734,22 @@ onMounted(async () => {
         </template>
       </VCardItem>
 
+      <VCardText class="pb-0">
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              density="compact"
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTableServer
         :headers="headers"
         :items="facturas"
@@ -733,19 +803,51 @@ onMounted(async () => {
           <VIcon v-if="item.rutaPdf" icon="tabler-file-type-pdf" size="14" color="error" class="ms-1" />
         </template>
         <template #item.actions="{ item }">
-          <IconBtn size="small" @click.stop="router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })">
-            <VIcon icon="tabler-eye" />
-          </IconBtn>
+          <VTooltip :text="item.rutaPdf ? 'Ver documento' : 'Ver detalle'" location="top">
+            <template #activator="{ props }">
+              <IconBtn v-bind="props" size="small" :loading="previewLoadingId === item.id" @click.stop="abrirVistaPrevia(item)">
+                <VIcon :icon="item.rutaPdf ? 'tabler-file-search' : 'tabler-eye'" />
+              </IconBtn>
+            </template>
+          </VTooltip>
+        </template>
+        <template #bottom>
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-4 flex-wrap gap-y-1">
+              <p class="text-disabled mb-0 text-body-2">
+                {{ paginationMeta({ page, itemsPerPage }, totalItems) }}
+              </p>
+              <div class="d-flex align-center gap-2">
+                <span class="text-disabled text-body-2">Filas por página:</span>
+                <AppSelect
+                  v-model="itemsPerPage"
+                  :items="itemsPerPageOptions"
+                  density="compact"
+                  style="width: 100px"
+                  @update:model-value="() => { page = 1; buscar() }"
+                />
+              </div>
+            </div>
+            <VPagination
+              v-if="itemsPerPage !== -1 && pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 7)"
+              @update:model-value="buscar"
+            />
+          </div>
+          <!-- Totales de la página actual -->
+          <VDivider />
+          <div class="d-flex justify-end align-center gap-6 text-body-2 font-weight-bold px-4 py-2 flex-wrap">
+            <span class="text-medium-emphasis font-weight-regular">{{ facturas.length }} en página · {{ totalItems }} en total</span>
+            <span>Base: {{ formatMoney(totalBase) }}</span>
+            <span>IVA: {{ formatMoney(totalIva) }}</span>
+            <span class="text-primary">Total: {{ formatMoney(totalImporte) }}</span>
+          </div>
         </template>
       </VDataTableServer>
-
-      <!-- Totales de la página actual -->
-      <div class="d-flex justify-end align-center gap-6 text-body-2 font-weight-bold px-4 py-2 border-t flex-wrap">
-        <span class="text-medium-emphasis font-weight-regular">{{ facturas.length }} en página · {{ totalItems }} en total</span>
-        <span>Base: {{ formatMoney(totalBase) }}</span>
-        <span>IVA: {{ formatMoney(totalIva) }}</span>
-        <span class="text-primary">Total: {{ formatMoney(totalImporte) }}</span>
-      </div>
     </VCard>
 
     <!-- Leyenda de estados -->
@@ -794,6 +896,21 @@ onMounted(async () => {
             Descargar
           </VBtn>
         </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Visor PDF -->
+    <VDialog v-model="pdfDialogOpen" max-width="960" max-height="90vh" scrollable>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-3">
+          <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+          Documento
+          <VSpacer />
+          <IconBtn @click="pdfDialogOpen = false"><VIcon icon="tabler-x" /></IconBtn>
+        </VCardTitle>
+        <VCardText class="pa-0" style="height: 80vh;">
+          <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
+        </VCardText>
       </VCard>
     </VDialog>
 

@@ -56,6 +56,9 @@ const headers = [
 ]
 
 const search = ref('')
+const page = ref(1)
+const itemsPerPage = ref(10)
+watch(search, () => { page.value = 1 })
 
 const rolColors: Record<string, string> = {
   SUPERADMIN: 'warning',
@@ -95,6 +98,8 @@ const rolColors: Record<string, string> = {
       </VCardText>
 
       <VDataTable
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
         :headers="headers"
         :items="usuarios"
         :search="search"
@@ -118,6 +123,22 @@ const rolColors: Record<string, string> = {
             <IconBtn size="small" color="error" @click="openDelete(item.id)">
               <VIcon icon="tabler-trash" />
             </IconBtn>
+          </div>
+        </template>
+        <template #bottom="{ pageCount }">
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-2">
+              <span class="text-disabled text-body-2">Filas por página:</span>
+              <AppSelect v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Todos', value: -1 }]" density="compact" style="width: 90px" />
+            </div>
+            <VPagination
+              v-if="pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 5)"
+            />
           </div>
         </template>
       </VDataTable>

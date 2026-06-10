@@ -137,6 +137,8 @@ export interface FacturaProveedorDto {
   proveedorFacturaId?: number
   proveedorFacturaNombre?: string
   proveedorFacturaCif?: string
+  proveedorFacturaDireccion?: string
+  proveedorFacturaCodigoPostal?: string
   entidadId?: number
   entidadNombre?: string
   tipoPagoId?: number
@@ -298,4 +300,5 @@ export interface FacturaFiltrosRequest {
   soloConIncidencias?: boolean
   contabilidadExportada?: boolean
   conciliadaConExtracto?: boolean
+  search?: string
 }

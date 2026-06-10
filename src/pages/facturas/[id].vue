@@ -26,6 +26,15 @@ const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref<'success' | 'error'>('success')
 
+// ─── Alta proveedor ───────────────────────────────────────────────────────────
+const altaProveedorDialog = ref(false)
+
+async function onProveedorCreado(proveedor: ProveedorFacturaDto) {
+  proveedores.value.push(proveedor)
+  await nextTick()
+  form.value.proveedorFacturaId = proveedor.id
+}
+
 // ─── Dropdown data ────────────────────────────────────────────────────────────
 const proveedores = ref<ProveedorFacturaDto[]>([])
 const entidades = ref<EntidadDto[]>([])
@@ -39,8 +48,10 @@ const form = ref({
   numeroFactura: '',
   fechaFactura: '',
   fechaPeticionFactura: '',
-  baseImponible: 0,
-  iva: 0,
+  ivaBase0: 0,
+  ivaBase4: 0,
+  ivaBase10: 0,
+  ivaBase21: 0,
   irpf: 0,
   importeTotal: 0,
   facturaEnDolares: false,
@@ -66,6 +77,10 @@ const pdfViewerUrl = computed<string | undefined>(() =>
 const nuevoEstado = ref('')
 const estadoSaving = ref(false)
 
+// USD conversión
+const usdConvirtiendo = ref(false)
+const usdMensaje = ref('')
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 const tiposFactura = ['INDETERMINADA', 'FACTURA', 'TICKET', 'PROFORMA']
 const tiposFiscal = ['ORDINARIA', 'INTRACOMUNITARIA', 'INVERSION_SUJETO_PASIVO']
@@ -83,6 +98,40 @@ const estadoColor: Record<string, string> = {
   PAGADA: 'primary',
 }
 
+// ─── Computed — visibilidad por tipo ─────────────────────────────────────────
+const esTicket = computed(() => form.value.tipo === 'TICKET')
+const esFacturaOProforma = computed(() => ['FACTURA', 'PROFORMA'].includes(form.value.tipo))
+const muestraFechaPeticion = computed(() => ['TICKET', 'PROFORMA'].includes(form.value.tipo))
+const muestraSeccionProveedor = computed(() => !esTicket.value)
+const muestraIvaDesglosado = computed(() => !esTicket.value)
+const muestraIrpf = computed(() => !esTicket.value)
+const muestraDivisa = computed(() => !esTicket.value)
+const muestraCuentaGasto = computed(() => !esTicket.value)
+
+// ─── Computed — IVA calculado ─────────────────────────────────────────────────
+const baseCalculada = computed(() =>
+  (form.value.ivaBase0 || 0) + (form.value.ivaBase4 || 0) +
+  (form.value.ivaBase10 || 0) + (form.value.ivaBase21 || 0)
+)
+const ivaCalculado = computed(() =>
+  Math.round(
+    ((form.value.ivaBase4 || 0) * 0.04 +
+     (form.value.ivaBase10 || 0) * 0.10 +
+     (form.value.ivaBase21 || 0) * 0.21) * 100
+  ) / 100
+)
+const totalCalculado = computed(() =>
+  Math.round((baseCalculada.value + ivaCalculado.value - (form.value.irpf || 0)) * 100) / 100
+)
+const totalDescuadra = computed(() =>
+  Math.abs(totalCalculado.value - (form.value.importeTotal || 0)) > 0.01
+)
+
+// ─── Computed — estado disponibles según tipo ─────────────────────────────────
+const estadosDisponibles = computed(() =>
+  estadosOptions.filter(e => e !== 'SOLICITADA_FACTURA' || esTicket.value)
+)
+
 // ─── Computed selects ─────────────────────────────────────────────────────────
 const proveedoresItems = computed(() =>
   proveedores.value.map(p => ({ title: p.nombre, value: p.id }))
@@ -90,23 +139,65 @@ const proveedoresItems = computed(() =>
 const entidadesItems = computed(() =>
   entidades.value.map(e => ({ title: e.nombre, value: e.id }))
 )
-const tiposPagoItems = computed(() =>
-  tiposPago.value.map(t => ({ title: t.nombre, value: t.id }))
-)
+const tiposPagoItems = computed(() => {
+  const items: { title: string; value: number | null }[] = [{ title: 'Pendiente', value: null }]
+  tiposPago.value.forEach(t => {
+    if (t.nombre) {
+      const n = t.nombre.toLowerCase()
+      if (n.includes('caja') && n.includes('otros'))
+        items.push({ title: t.nombre, value: t.id })
+    }
+  })
+  return items
+})
 const codigosCuentaItems = computed(() =>
   codigosCuenta.value.map(c => ({ title: `${c.codigo} — ${c.descripcion}`, value: c.id }))
 )
 
+// Datos del proveedor seleccionado (para mostrar CIF, CP, Dirección)
+const proveedorSeleccionado = computed(() =>
+  proveedores.value.find(p => p.id === form.value.proveedorFacturaId) ?? null
+)
+
+// ─── Watch — reset estado si tipo cambia de TICKET ────────────────────────────
+watch(() => form.value.tipo, (nuevoTipo) => {
+  if (nuevoTipo !== 'TICKET' && form.value.estado === 'SOLICITADA_FACTURA') {
+    form.value.estado = 'PENDIENTE_REVISION'
+    nuevoEstado.value = 'PENDIENTE_REVISION'
+  }
+})
+
 // ─── Methods ──────────────────────────────────────────────────────────────────
 function fillForm(f: FacturaProveedorDto) {
+  const base = (pct: number) => {
+    const linea = f.lineasIva?.find(l => Number(l.porcentajeIva) === pct)
+    return linea ? Number(linea.baseImponible) : 0
+  }
+  const tieneLineas = f.lineasIva && f.lineasIva.length > 0
+
+  // Sin líneas desglosadas: inferir el campo correcto por el ratio iva/baseImponible
+  let ivaBase0 = 0, ivaBase4 = 0, ivaBase10 = 0, ivaBase21 = 0
+  if (tieneLineas) {
+    ivaBase0 = base(0); ivaBase4 = base(4); ivaBase10 = base(10); ivaBase21 = base(21)
+  } else {
+    const baseVal = Number(f.baseImponible ?? 0)
+    if (baseVal > 0) {
+      const ivaVal = Number(f.iva ?? 0)
+      const pct = Math.round(ivaVal / baseVal * 100)
+      if (pct <= 1)       ivaBase0  = baseVal
+      else if (pct <= 6)  ivaBase4  = baseVal
+      else if (pct <= 15) ivaBase10 = baseVal
+      else                ivaBase21 = baseVal
+    }
+  }
+
   form.value = {
     tipo: f.tipo ?? '',
     tipoFacturaFiscal: f.tipoFacturaFiscal ?? '',
     numeroFactura: f.numeroFactura ?? '',
     fechaFactura: f.fechaFactura ? f.fechaFactura.substring(0, 10) : '',
     fechaPeticionFactura: f.fechaPeticionFactura ? f.fechaPeticionFactura.substring(0, 10) : '',
-    baseImponible: f.baseImponible ?? 0,
-    iva: f.iva ?? 0,
+    ivaBase0, ivaBase4, ivaBase10, ivaBase21,
     irpf: f.irpf ?? 0,
     importeTotal: f.importeTotal ?? 0,
     facturaEnDolares: f.facturaEnDolares,
@@ -119,6 +210,10 @@ function fillForm(f: FacturaProveedorDto) {
     tipoPagoId: f.tipoPagoId ?? null,
     codigoCuentaGastoId: f.codigoCuentaGastoId ?? null,
   }
+  // Si tenemos bases imponibles calculadas, sincronizar importeTotal con totalCalculado
+  // para que el IRPF (y cualquier descuadre de la IA) quede correctamente aplicado
+  if (ivaBase0 > 0 || ivaBase4 > 0 || ivaBase10 > 0 || ivaBase21 > 0)
+    form.value.importeTotal = totalCalculado.value
   nuevoEstado.value = f.estado ?? ''
 }
 
@@ -162,11 +257,28 @@ async function guardar() {
     const updated = await $api<FacturaProveedorDto>(`/facturas/${id.value}`, {
       method: 'PUT',
       body: {
-        ...form.value,
         tipo: form.value.tipo || null,
         tipoFacturaFiscal: form.value.tipoFacturaFiscal || null,
+        numeroFactura: form.value.numeroFactura,
         fechaFactura: form.value.fechaFactura || null,
         fechaPeticionFactura: form.value.fechaPeticionFactura || null,
+        lineasIva: [
+          { porcentajeIva: 0,  baseImponible: form.value.ivaBase0 || 0 },
+          { porcentajeIva: 4,  baseImponible: form.value.ivaBase4 || 0 },
+          { porcentajeIva: 10, baseImponible: form.value.ivaBase10 || 0 },
+          { porcentajeIva: 21, baseImponible: form.value.ivaBase21 || 0 },
+        ],
+        irpf: form.value.irpf,
+        importeTotal: form.value.importeTotal,
+        facturaEnDolares: form.value.facturaEnDolares,
+        conceptoGeneral: form.value.conceptoGeneral,
+        incidenciasNotas: form.value.incidenciasNotas,
+        estado: form.value.estado || null,
+        comentarioPagoCajaOtros: form.value.comentarioPagoCajaOtros,
+        proveedorFacturaId: form.value.proveedorFacturaId,
+        entidadId: form.value.entidadId,
+        tipoPagoId: form.value.tipoPagoId,
+        codigoCuentaGastoId: form.value.codigoCuentaGastoId,
       },
     })
     factura.value = updated
@@ -201,6 +313,42 @@ async function cambiarEstado() {
   }
 }
 
+async function convertirUsd() {
+  if (!form.value.fechaFactura) {
+    showMsg('Introduce la fecha de factura antes de convertir', 'error')
+    return
+  }
+  usdConvirtiendo.value = true
+  usdMensaje.value = ''
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const resp = await fetch(
+      `${baseUrl}/tipo-cambio/usd-eur?fecha=${form.value.fechaFactura}`,
+      { headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {} }
+    )
+    if (!resp.ok) throw new Error('No se pudo obtener el tipo de cambio')
+    const data: { ok: boolean; usdToEur: number; fecha: string } = await resp.json()
+    if (!data.ok || !data.usdToEur) throw new Error('Tipo de cambio no disponible para esa fecha')
+
+    const rate = Number(data.usdToEur)
+    const round2 = (v: number) => Math.round(v * rate * 100) / 100
+    form.value.ivaBase0  = round2(form.value.ivaBase0 || 0)
+    form.value.ivaBase4  = round2(form.value.ivaBase4 || 0)
+    form.value.ivaBase10 = round2(form.value.ivaBase10 || 0)
+    form.value.ivaBase21 = round2(form.value.ivaBase21 || 0)
+    if (form.value.irpf) form.value.irpf = round2(form.value.irpf)
+    form.value.importeTotal = totalCalculado.value
+    usdMensaje.value = `Convertido a EUR con USD/EUR=${rate.toFixed(6)} (${data.fecha})`
+  }
+  catch (e: any) {
+    showMsg(e?.message || 'Error al obtener tipo de cambio', 'error')
+  }
+  finally {
+    usdConvirtiendo.value = false
+  }
+}
+
 onMounted(async () => {
   loading.value = true
   try {
@@ -231,7 +379,7 @@ onUnmounted(() => {
   </div>
 
   <div v-else-if="factura">
-      <!-- Cabecera -->
+    <!-- Cabecera -->
     <div class="d-flex align-center gap-3 mb-4">
       <VBtn icon variant="text" @click="router.push(listadoTarget)">
         <VIcon icon="tabler-arrow-left" />
@@ -254,48 +402,118 @@ onUnmounted(() => {
 
     <VRow>
       <!-- Columna principal: formulario -->
-      <VCol cols="12" md="12" :lg="factura.rutaPdf ? 7 : 12" order="2" order-lg="1">
+      <VCol cols="12" md="12" :lg="factura.rutaPdf ? 6 : 12" order="2" order-lg="1">
+
+         <!-- Datos básicos -->
+        <VCard class="mb-4">
+          <VCardItem><VCardTitle>Datos del proveedor (como en la factura)</VCardTitle></VCardItem>
+          <VCardText>
+            <VRow>
+             
+
+              <!-- Proveedor y sus datos (oculto para TICKET) -->
+              <template v-if="muestraSeccionProveedor">
+                <VCol cols="12" sm="8">
+                  <AppSelect
+                    v-model="form.proveedorFacturaId"
+                    label="Proveedor"
+                    :items="proveedoresItems"
+                    clearable
+                  />
+                 
+                </VCol>
+                <VCol cols="12" sm="4" class="d-flex align-end">
+                  <VBtn @click="altaProveedorDialog = true">
+                    <VIcon start icon="tabler-user-plus" />
+                    Alta Proveedor
+                  </VBtn>
+                </VCol>
+                <VCol cols="12 pt-0">
+                  <span class="text-body-2 text-primary">
+                    Si el proveedor no está en la lista, rellene los datos y use <strong>Alta de proveedor</strong> para crearlo y asignarlo a esta factura.
+                  </span>
+                </VCol>
+               
+                <VCol cols="12" sm="12">
+                    <AppTextField
+                      :model-value="factura.proveedorFacturaNombre ?? proveedorSeleccionado?.nombre ?? ''"
+                      label="Nombre"
+                      readonly
+                      variant="outlined"
+                    />
+                  </VCol>
+                <template v-if="form.proveedorFacturaId">
+                  <VCol cols="12" sm="6">
+                    <AppTextField
+                      :model-value="factura.proveedorFacturaCif ?? proveedorSeleccionado?.cif ?? ''"
+                      label="CIF"
+                      readonly
+                      variant="outlined"
+                    />
+                  </VCol>
+                  <VCol cols="12" sm="6">
+                    <AppTextField
+                      :model-value="factura.proveedorFacturaCodigoPostal ?? proveedorSeleccionado?.codigoPostal ?? ''"
+                      label="Código postal"
+                      readonly
+                      variant="outlined"
+                    />
+                  </VCol>
+                  <VCol cols="12" sm="12">
+                    <AppTextField
+                      :model-value="factura.proveedorFacturaDireccion ?? proveedorSeleccionado?.direccion ?? ''"
+                      label="Dirección"
+                      readonly
+                      variant="outlined"
+                    />
+                  </VCol>
+                </template>
+              </template>
+
+            </VRow>
+          </VCardText>
+        </VCard>
+
+
+
 
         <!-- Datos básicos -->
         <VCard class="mb-4">
-          <VCardItem><VCardTitle>Datos del documento</VCardTitle></VCardItem>
+          <VCardItem><VCardTitle>Datos de la factura</VCardTitle></VCardItem>
           <VCardText>
             <VRow>
-              <VCol cols="12" sm="6">
-                <AppSelect v-model="form.tipo" label="Tipo" :items="tiposFactura" clearable />
-              </VCol>
-              <VCol cols="12" sm="6">
-                <AppSelect v-model="form.tipoFacturaFiscal" label="Tipo fiscal" :items="tiposFiscal" clearable />
-              </VCol>
-              <VCol cols="12" sm="6">
+               <VCol v-if="!esTicket" cols="12" sm="6">
                 <AppTextField v-model="form.numeroFactura" label="Nº Factura" />
               </VCol>
               <VCol cols="12" sm="6">
                 <AppTextField v-model="form.fechaFactura" label="Fecha factura" type="date" />
               </VCol>
-              <!--
               <VCol cols="12" sm="6">
+                <AppSelect v-model="form.tipo" label="Tipo" :items="tiposFactura" clearable />
+              </VCol>
+              <VCol v-if="esFacturaOProforma" cols="12" sm="6">
+                <AppSelect v-model="form.tipoFacturaFiscal" label="Tipo fiscal" :items="tiposFiscal" clearable />
+              </VCol>
+             
+              <VCol v-if="muestraFechaPeticion" cols="12" sm="6">
                 <AppTextField v-model="form.fechaPeticionFactura" label="Fecha petición" type="date" />
               </VCol>
-            -->
+
+              <VCol cols="12" sm="6">
+                <AppSelect v-model="form.entidadId" label="A quien se aplica" :items="entidadesItems" clearable />
+              </VCol>
               <VCol cols="12" sm="6">
                 <AppSelect
-                  v-model="form.proveedorFacturaId"
-                  label="Proveedor"
-                  :items="proveedoresItems"
+                  v-model="form.tipoPagoId"
+                  label="Tipo de pago"
+                  :items="tiposPagoItems"
                   clearable
                 />
               </VCol>
-              <VCol cols="12" sm="6">
-                <AppSelect v-model="form.entidadId" label="Entidad" :items="entidadesItems" clearable />
-              </VCol>
-              <VCol cols="12" sm="6">
-                <AppSelect v-model="form.tipoPagoId" label="Tipo de pago" :items="tiposPagoItems" clearable />
-              </VCol>
-              <VCol cols="12">
+              <VCol v-if="muestraCuentaGasto" cols="12">
                 <AppSelect
                   v-model="form.codigoCuentaGastoId"
-                  label="Cuenta de gasto"
+                  label="Código cuenta gasto (opcional)"
                   :items="codigosCuentaItems"
                   clearable
                 />
@@ -312,21 +530,99 @@ onUnmounted(() => {
           <VCardItem><VCardTitle>Importes</VCardTitle></VCardItem>
           <VCardText>
             <VRow>
-              <VCol cols="6" sm="3">
-                <AppTextField v-model.number="form.baseImponible" label="Base imponible" type="number" />
+              <!-- Bases imponibles por tipo de IVA (oculto para TICKET) -->
+              <template v-if="muestraIvaDesglosado">
+                <VCol cols="12">
+                  <p class="text-subtitle-2 mb-1">Bases imponibles por tipo de IVA</p>
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    v-model.number="form.ivaBase0"
+                    label="Base imponible 0% (€)"
+                    type="number" step="0.01" min="0"
+                    @update:model-value="form.importeTotal = totalCalculado"
+                  />
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    v-model.number="form.ivaBase4"
+                    label="Base imponible 4% (€)"
+                    type="number" step="0.01" min="0"
+                    @update:model-value="form.importeTotal = totalCalculado"
+                  />
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    v-model.number="form.ivaBase10"
+                    label="Base imponible 10% (€)"
+                    type="number" step="0.01" min="0"
+                    @update:model-value="form.importeTotal = totalCalculado"
+                  />
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    v-model.number="form.ivaBase21"
+                    label="Base imponible 21% (€)"
+                    type="number" step="0.01" min="0"
+                    @update:model-value="form.importeTotal = totalCalculado"
+                  />
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    :model-value="baseCalculada.toFixed(2)"
+                    label="Base imponible (€)"
+                    readonly variant="outlined"
+                  />
+                </VCol>
+                <VCol cols="6" sm="3">
+                  <AppTextField
+                    :model-value="ivaCalculado.toFixed(2)"
+                    label="IVA (€)"
+                    readonly variant="outlined"
+                  />
+                </VCol>
+              </template>
+
+              <VCol v-if="muestraIrpf" cols="6" sm="3">
+                <AppTextField
+                  v-model.number="form.irpf"
+                  label="IRPF (€)"
+                  type="number" step="0.01"
+                  @update:model-value="form.importeTotal = totalCalculado"
+                />
               </VCol>
               <VCol cols="6" sm="3">
-                <AppTextField v-model.number="form.iva" label="IVA" type="number" />
+                <AppTextField v-model.number="form.importeTotal" label="Importe total (€)" type="number" step="0.01" />
               </VCol>
-              <VCol cols="6" sm="3">
-                <AppTextField v-model.number="form.irpf" label="IRPF" type="number" />
+              <VCol v-if="muestraIvaDesglosado && totalDescuadra" cols="12">
+                <VAlert type="warning" variant="tonal" density="compact">
+                  El total no cuadra con las bases imponibles e impuestos.
+                </VAlert>
               </VCol>
-              <VCol cols="6" sm="3">
-                <AppTextField v-model.number="form.importeTotal" label="Importe total" type="number" />
-              </VCol>
-              <VCol cols="12" sm="6" class="d-flex align-center">
-                <VSwitch v-model="form.facturaEnDolares" label="Factura en dólares" color="warning" density="compact" />
-              </VCol>
+
+              <!-- Divisa USD (oculto para TICKET) -->
+              <template v-if="muestraDivisa">
+                <VCol cols="12" sm="6" class="d-flex align-center">
+                  <VSwitch v-model="form.facturaEnDolares" label="Factura en dólares (USD)" color="warning" density="compact" />
+                </VCol>
+                <VCol v-if="form.facturaEnDolares" cols="12" sm="6" class="d-flex align-center gap-2">
+                  <VBtn
+                    :loading="usdConvirtiendo"
+                    variant="tonal"
+                    color="warning"
+                    size="small"
+                    @click="convertirUsd"
+                  >
+                    <VIcon start icon="tabler-currency-euro" />
+                    Convertir importes a EUR (fecha factura)
+                  </VBtn>
+                </VCol>
+                <VCol v-if="usdMensaje" cols="12">
+                  <VAlert type="info" variant="tonal" density="compact" closable @click:close="usdMensaje = ''">
+                    {{ usdMensaje }}
+                  </VAlert>
+                </VCol>
+              </template>
             </VRow>
           </VCardText>
         </VCard>
@@ -340,7 +636,7 @@ onUnmounted(() => {
                 <AppSelect
                   v-model="nuevoEstado"
                   label="Cambiar estado"
-                  :items="estadosOptions.map(e => ({ title: estadoLabel[e], value: e }))"
+                  :items="estadosDisponibles.map(e => ({ title: estadoLabel[e], value: e }))"
                 />
               </VCol>
               <VCol cols="12" sm="6" class="d-flex align-end pb-1">
@@ -349,10 +645,10 @@ onUnmounted(() => {
                 </VBtn>
               </VCol>
               <VCol cols="12">
-                <AppTextField v-model="form.comentarioPagoCajaOtros" label="Comentario pago caja/otros" />
+                <AppTextarea v-model="form.comentarioPagoCajaOtros" label="Comentario pago caja/otros" rows="2" auto-grow />
               </VCol>
               <VCol cols="12">
-                <AppTextarea v-model="form.incidenciasNotas" label="Notas sobre incidencias" rows="3" />
+                <AppTextarea v-model="form.incidenciasNotas" label="Notas sobre incidencias" rows="2" auto-grow />
               </VCol>
             </VRow>
 
@@ -367,41 +663,16 @@ onUnmounted(() => {
             </VAlert>
           </VCardText>
         </VCard>
-
-        <!-- Líneas IVA (solo lectura) -->
-        <VCard v-if="factura.lineasIva && factura.lineasIva.length > 0" class="mb-4">
-          <VCardItem><VCardTitle>Líneas de IVA</VCardTitle></VCardItem>
-          <VCardText>
-            <VTable density="compact">
-              <thead>
-                <tr>
-                  <th>% IVA</th>
-                  <th>Base imponible</th>
-                  <th>Cuota IVA</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="linea in factura.lineasIva" :key="linea.id">
-                  <td>{{ linea.porcentajeIva }}%</td>
-                  <td>{{ linea.baseImponible.toFixed(2) }} €</td>
-                  <td>{{ linea.cuotaIva.toFixed(2) }} €</td>
-                </tr>
-              </tbody>
-            </VTable>
-          </VCardText>
-        </VCard>
       </VCol>
 
       <!-- Columna PDF -->
-      <VCol v-if="factura.rutaPdf" cols="12" md="12" lg="5" order="1" order-lg="2">
-
+      <VCol v-if="factura.rutaPdf" cols="12" md="12" lg="6" order="1" order-lg="2">
         <VCard
           class="pdf-card"
           :class="{ 'pdf-card--sticky': lgAndUp }"
         >
           <VCardItem>
             <VCardTitle>PDF Adjunto</VCardTitle>
-
             <template #append>
               <VBtn
                 v-if="pdfBlobUrl"
@@ -441,6 +712,8 @@ onUnmounted(() => {
   <VSnackbar v-model="snackbar" :color="snackbarColor" location="bottom end">
     {{ snackbarMsg }}
   </VSnackbar>
+
+  <ProveedorFormDialog v-model="altaProveedorDialog" @saved="onProveedorCreado" />
 </template>
 <style lang="scss" scoped>
 @use '@/assets/styles/pages/facturas/edit.scss';

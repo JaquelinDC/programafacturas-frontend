@@ -81,20 +81,59 @@ async function subirExtracto() {
   }
 }
 
-const formatDate = (d?: string) => d ? d.substring(0, 10) : '—'
-const formatDateTime = (d?: string) => d ? d.substring(0, 16).replace('T', ' ') : '—'
+const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
+const formatDateTime = (d?: string) => d ? `${d.substring(0, 10).split('-').reverse().join('/')} ${d.substring(11, 16)}` : '—'
 
 const search = ref('')
+const page = ref(1)
+const itemsPerPage = ref(10)
+watch(search, () => { page.value = 1 })
 
 const headers = [
-  { title: 'ID', key: 'id', width: 70 },
-  { title: 'Banco', key: 'banco', width: 160 },
-  { title: 'Fichero', key: 'nombreFichero' },
-  { title: 'Desde', key: 'fechaInicioMovimientos', width: 110 },
-  { title: 'Hasta', key: 'fechaFinMovimientos', width: 110 },
-  { title: 'Subido', key: 'fechaSubida', width: 150 },
-  { title: '', key: 'actions', sortable: false, width: 60 },
+  { title: 'ID', key: 'id', width: 60 },
+  { title: 'Fecha subida', key: 'fechaSubida', width: 160 },
+  { title: 'Banco', key: 'banco', width: 140 },
+  { title: 'Período', key: 'periodo', sortable: false, width: 200 },
+  { title: 'Movimientos', key: 'movimientosTotales', width: 120 },
+  { title: 'Conciliación', key: 'conciliacion', sortable: false, width: 180 },
+  { title: 'Acciones', key: 'actions', sortable: false, width: 200 },
 ]
+
+const downloadLoading = ref<number | null>(null)
+
+async function descargarExtracto(item: ExtractoBancarioDto) {
+  downloadLoading.value = item.id
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/extractos/${item.id}/excel`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (!response.ok) return
+    const blob = await response.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = item.nombreFichero || `extracto_${item.id}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  finally {
+    downloadLoading.value = null
+  }
+}
+
+function abrirExtracto(id: number) {
+  window.open(`/extractos/${id}`, `extracto_${id}`, 'width=1400,height=900,scrollbars=yes,resizable=yes,menubar=no')
+}
+
+function conciliacionColor(item: ExtractoBancarioDto) {
+  if (!item.movimientosTotales) return 'default'
+  const pct = item.movimientosConciliados / item.movimientosTotales
+  if (pct > 0.75) return 'success'
+  if (pct >= 0.5) return 'warning'
+  return 'error'
+}
 
 onMounted(cargar)
 </script>
@@ -159,29 +198,71 @@ onMounted(cargar)
       </VCardText>
 
       <VDataTable
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
         :headers="headers"
         :items="extractos"
         :search="search"
         :loading="loading"
         item-value="id"
-        hover
-        @click:row="(_: any, { item }: any) => router.push(`/extractos/${item.id}`)"
       >
-        <template #item.fechaInicioMovimientos="{ item }">{{ formatDate(item.fechaInicioMovimientos) }}</template>
-        <template #item.fechaFinMovimientos="{ item }">{{ formatDate(item.fechaFinMovimientos) }}</template>
         <template #item.fechaSubida="{ item }">{{ formatDateTime(item.fechaSubida) }}</template>
-        <template #item.nombreFichero="{ item }">
-          <div class="d-flex flex-column">
-            <span>{{ item.nombreFichero }}</span>
-            <small class="text-disabled">
-              Conciliados {{ item.movimientosConciliados }}/{{ item.movimientosTotales }} movimientos
-            </small>
-          </div>
+        
+        <template #item.periodo="{ item }">
+          {{ formatDate(item.fechaInicioMovimientos) }} – {{ formatDate(item.fechaFinMovimientos) }}
+        </template>
+        <template #item.movimientosTotales="{ item }">
+          <VChip size="small" variant="tonal" color="secondary">{{ item.movimientosTotales }}</VChip>
+        </template>
+        <template #item.conciliacion="{ item }">
+          <VChip
+            v-if="item.movimientosTotales > 0"
+            size="small"
+            variant="tonal"
+            :color="conciliacionColor(item)"
+          >
+            {{ item.movimientosConciliados }} / {{ item.movimientosTotales }}
+          </VChip>
+          <span v-else class="text-disabled text-body-2">Sin conciliación</span>
         </template>
         <template #item.actions="{ item }">
-          <IconBtn size="small" @click.stop="router.push(`/extractos/${item.id}`)">
-            <VIcon icon="tabler-eye" />
-          </IconBtn>
+          <div class="d-flex gap-1 align-center">
+            <VBtn
+              size="small"
+              variant="tonal"
+              color="primary"
+              prepend-icon="tabler-eye"
+              @click="() => router.push(`/extractos/${item.id}`)"
+            >
+              Ver movimientos
+            </VBtn>
+            <VBtn
+              size="small"
+              variant="tonal"
+              icon
+              :loading="downloadLoading === item.id"
+              @click.stop="descargarExtracto(item)"
+            >
+              <VIcon icon="tabler-download" />
+              <VTooltip activator="parent">Descargar Excel</VTooltip>
+            </VBtn>
+          </div>
+        </template>
+        <template #bottom="{ pageCount }">
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-2">
+              <span class="text-disabled text-body-2">Filas por página:</span>
+              <AppSelect v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Todos', value: -1 }]" density="compact" style="width: 90px" />
+            </div>
+            <VPagination
+              v-if="pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 5)"
+            />
+          </div>
         </template>
       </VDataTable>
     </VCard>

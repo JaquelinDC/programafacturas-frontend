@@ -22,6 +22,10 @@ const {
 } = useCrud<ConceptoNoConciliableDto>('/conciliacion-conceptos')
 
 const form = ref({ texto: '', activo: true })
+const page = ref(1)
+const itemsPerPage = ref(10)
+const search = ref('')
+watch(search, () => { page.value = 1 })
 
 watch(dialog, open => {
   if (open) {
@@ -57,9 +61,28 @@ onMounted(fetchAll)
         </template>
       </VCardItem>
 
+      <VCardText class="pb-0">
+        <VRow>
+          <VCol cols="12" offset-md="8" md="4">
+            <AppTextField
+              v-model="search"
+              placeholder="Buscar..."
+              append-inner-icon="tabler-search"
+              single-line
+              hide-details
+              density="compact"
+              outlined
+            />
+          </VCol>
+        </VRow>
+      </VCardText>
+
       <VDataTable
+        v-model:page="page"
+        v-model:items-per-page="itemsPerPage"
         :headers="headers"
         :items="conceptos"
+        :search="search"
         :loading="loading"
         item-value="id"
         hover
@@ -74,6 +97,22 @@ onMounted(fetchAll)
             <IconBtn size="small" color="error" @click="openDelete(item.id)">
               <VIcon icon="tabler-trash" />
             </IconBtn>
+          </div>
+        </template>
+        <template #bottom="{ pageCount }">
+          <VDivider />
+          <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
+            <div class="d-flex align-center gap-2">
+              <span class="text-disabled text-body-2">Filas por página:</span>
+              <AppSelect v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Todos', value: -1 }]" density="compact" style="width: 90px" />
+            </div>
+            <VPagination
+              v-if="pageCount > 1"
+              v-model="page"
+              active-color="primary"
+              :length="pageCount"
+              :total-visible="$vuetify.display.xs ? 1 : Math.min(pageCount, 5)"
+            />
           </div>
         </template>
       </VDataTable>
