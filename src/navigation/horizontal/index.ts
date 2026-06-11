@@ -5,6 +5,11 @@ export default [
     icon: { icon: 'tabler-smart-home' },
   },
   {
+    title: 'Chat IA',
+    to: { name: 'ai-chat' },
+    icon: { icon: 'tabler-sparkles' },
+  },
+  {
     title: 'Facturas',
     to: { name: 'facturas' },
     icon: { icon: 'tabler-file-invoice' },

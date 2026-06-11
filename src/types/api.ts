@@ -302,3 +302,36 @@ export interface FacturaFiltrosRequest {
   conciliadaConExtracto?: boolean
   search?: string
 }
+
+// â”€â”€â”€ AI chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+export interface AiChatMessageRequest {
+  role: 'user' | 'assistant' | 'system'
+  content: string
+}
+
+export interface AiChatRequest {
+  question: string
+  scope?: string
+  periodPreset?: string
+  fromDate?: string
+  toDate?: string
+  messages?: AiChatMessageRequest[]
+}
+
+export interface AiChatMetricDto {
+  label: string
+  value: string
+  detail?: string
+  trend?: string
+}
+
+export interface AiChatResponse {
+  answer: string
+  sourceSummary: string
+  scopeLabel: string
+  periodLabel: string
+  metrics: AiChatMetricDto[]
+  suggestedQuestions: string[]
+  dataNotes: string[]
+}

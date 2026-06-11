@@ -4,6 +4,11 @@ export default [
     to: { name: 'root' },
     icon: { icon: 'tabler-smart-home' },
   },
+  {
+    title: 'Chat IA',
+    to: { name: 'ai-chat' },
+    icon: { icon: 'tabler-sparkles' },
+  },
   { heading: 'Operativa diaria' },
   {
     title: 'Facturas proveedor',
@@ -26,6 +31,7 @@ export default [
     to: { name: 'extractos' },
     icon: { icon: 'tabler-building-bank' },
   },
+
   /*
   {
     title: 'Movimientos Bancarios',
@@ -39,6 +45,7 @@ export default [
     icon: { icon: 'tabler-ban' },
   },
   { heading: 'Maestros' },
+
   /*
   {
     title: 'Proveedores',

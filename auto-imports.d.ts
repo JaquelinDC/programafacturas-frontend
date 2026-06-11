@@ -134,6 +134,7 @@ declare global {
   const resolveUnref: typeof import('@vueuse/core')['resolveUnref']
   const resolveVuetifyTheme: typeof import('./src/@core/utils/vuetify')['resolveVuetifyTheme']
   const rgbaToHex: typeof import('./src/@core/utils/colorConverter')['rgbaToHex']
+  const sendAiChatMessage: typeof import('./src/utils/ai-chat')['sendAiChatMessage']
   const setActivePinia: typeof import('pinia')['setActivePinia']
   const setMapStoreSuffix: typeof import('pinia')['setMapStoreSuffix']
   const shallowReactive: typeof import('vue')['shallowReactive']
@@ -163,6 +164,7 @@ declare global {
   const useAbility: typeof import('./src/plugins/casl/composables/useAbility')['useAbility']
   const useAbs: typeof import('@vueuse/math')['useAbs']
   const useActiveElement: typeof import('@vueuse/core')['useActiveElement']
+  const useAiChat: typeof import('./src/composables/useAiChat')['useAiChat']
   const useAnimate: typeof import('@vueuse/core')['useAnimate']
   const useApi: typeof import('./src/composables/useApi')['useApi']
   const useArrayDifference: typeof import('@vueuse/core')['useArrayDifference']
@@ -501,6 +503,7 @@ declare module 'vue' {
     readonly resolveUnref: UnwrapRef<typeof import('@vueuse/core')['resolveUnref']>
     readonly resolveVuetifyTheme: UnwrapRef<typeof import('./src/@core/utils/vuetify')['resolveVuetifyTheme']>
     readonly rgbaToHex: UnwrapRef<typeof import('./src/@core/utils/colorConverter')['rgbaToHex']>
+    readonly sendAiChatMessage: UnwrapRef<typeof import('./src/utils/ai-chat')['sendAiChatMessage']>
     readonly setActivePinia: UnwrapRef<typeof import('pinia')['setActivePinia']>
     readonly setMapStoreSuffix: UnwrapRef<typeof import('pinia')['setMapStoreSuffix']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>
@@ -529,6 +532,7 @@ declare module 'vue' {
     readonly urlValidator: UnwrapRef<typeof import('./src/@core/utils/validators')['urlValidator']>
     readonly useAbs: UnwrapRef<typeof import('@vueuse/math')['useAbs']>
     readonly useActiveElement: UnwrapRef<typeof import('@vueuse/core')['useActiveElement']>
+    readonly useAiChat: UnwrapRef<typeof import('./src/composables/useAiChat')['useAiChat']>
     readonly useAnimate: UnwrapRef<typeof import('@vueuse/core')['useAnimate']>
     readonly useApi: UnwrapRef<typeof import('./src/composables/useApi')['useApi']>
     readonly useArrayDifference: UnwrapRef<typeof import('@vueuse/core')['useArrayDifference']>

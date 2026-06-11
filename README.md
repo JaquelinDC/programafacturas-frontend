@@ -9,6 +9,11 @@ Proyecto original de referencia: `facturacion original-no tocar`.
 - `ARCHITECTURE.md`
 - `PROJECT_STRUCTURE_GUIDE.md`
 
+## Pages
+
+- `Chat IA`: `/ai-chat`
+- Home: `/`
+
 ## Setup
 
 ```sh
@@ -29,5 +34,7 @@ pnpm build
 
 ## Notes
 
-- La API base se configura en `VITE_API_BASE_URL`.
-- El token JWT se maneja en `src/stores/auth.ts`.
+- La API base se configura en `VITE_API_BASE_URL`. Si no se define, el frontend usa el proxy de Vite en `/api`.
+- El token JWT se maneja en `src/stores/auth.ts` y el cliente HTTP central vive en `src/utils/api.ts`.
+- El chat IA usa `src/composables/useAiChat.ts` y no llama a OpenAI directamente desde el navegador.
+- Para ajustar la UX del chat, cambia la página `src/pages/ai-chat.vue`.
