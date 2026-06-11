@@ -52,6 +52,78 @@ const someVisibleSelected = computed(() => facturas.value.some(f => selectedFact
 const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importe ?? 0), 0))
 const pageCount = computed(() => itemsPerPage.value > 0 ? Math.ceil(totalItems.value / itemsPerPage.value) : 1)
 
+// ─── Previsualización documento ───────────────────────────────────────────────
+const previewLoadingId = ref<number | null>(null)
+const pdfDialogOpen = ref(false)
+const pdfUrl = ref('')
+const pdfMime = ref('')
+const pdfFilename = ref('documento')
+
+watch(pdfDialogOpen, open => {
+  if (!open && pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = ''
+    pdfMime.value = ''
+    pdfFilename.value = 'documento'
+  }
+})
+
+function mimeFromPath(ruta: string): string {
+  const ext = ruta.split('.').pop()?.toLowerCase() ?? ''
+  if (ext === 'pdf') return 'application/pdf'
+  if (['jpg', 'jpeg'].includes(ext)) return 'image/jpeg'
+  if (ext === 'png') return 'image/png'
+  if (ext === 'webp') return 'image/webp'
+  return ''
+}
+
+async function abrirVistaPrevia(item: FacturaEmitidaDto) {
+  previewLoadingId.value = item.id
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/facturas-emitidas/${item.id}/documento`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (!response.ok) {
+      showMsg('No se pudo cargar el documento', 'error')
+      return
+    }
+    const rawContentType = (response.headers.get('Content-Type') ?? '').split(';')[0].trim()
+    const serverMime = rawContentType !== 'application/octet-stream' ? rawContentType : ''
+    const disposition = response.headers.get('Content-Disposition') ?? ''
+    const dispositionFilename = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)?.[1]?.replace(/['"]/g, '').trim() ?? ''
+    const inferredMime = mimeFromPath(dispositionFilename || (item.rutaDocumento ?? ''))
+    const mime = serverMime || inferredMime || 'application/pdf'
+    const rawBlob = await response.blob()
+    const blob = rawBlob.type === mime ? rawBlob : new Blob([rawBlob], { type: mime })
+    pdfMime.value = mime
+    pdfFilename.value = dispositionFilename || `factura-${item.numeroFactura ?? item.id}.${mime === 'application/pdf' ? 'pdf' : mime.split('/')[1] ?? 'pdf'}`
+    pdfUrl.value = URL.createObjectURL(blob)
+    pdfDialogOpen.value = true
+  }
+  catch {
+    showMsg('No se pudo cargar el documento', 'error')
+  }
+  finally {
+    previewLoadingId.value = null
+  }
+}
+
+// ─── Caché de páginas ─────────────────────────────────────────────────────────
+const CACHE_TTL_MS = 2 * 60 * 1000
+const MAX_CACHE_ENTRIES = 20
+interface CacheEntry { content: FacturaEmitidaDto[]; totalElements: number; ts: number }
+const pageCache = new Map<string, CacheEntry>()
+
+function buildCacheKey(pg: number, sz: number, sort?: { key: string; order: string }) {
+  return JSON.stringify({ ...filtros.value, page: pg, size: sz, ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}) })
+}
+
+function limpiarCache() {
+  pageCache.clear()
+}
+
 const filtros = ref({ numeroFactura: '', cliente: '', referencia: '', fechaDesde: '', fechaHasta: '' })
 const form = ref({ numeroFactura: '', fechaFactura: '', referencia: '', formaPago: '', importe: 0, baseImponible: 0, iva: 0, clienteId: null as number | null })
 const uploadFile = ref<File | File[] | null>(null)
@@ -64,11 +136,11 @@ const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().j
 const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 const headers = [
-  { title: 'Nº Factura', key: 'numeroFactura', sortable: true, width: 130 },
+  { title: 'Nº Factura', key: 'numeroFactura', sortable: true, width: 110 },
   { title: 'Fecha', key: 'fechaFactura', sortable: true, width: 110 },
   { title: 'Cliente', key: 'clienteNombre', sortable: false, width: 200 },
   { title: 'Referencia', key: 'referencia', sortable: false },
-  { title: 'Forma pago', key: 'formaPago', sortable: false, width: 130 },
+  { title: 'Forma pago', key: 'formaPago', sortable: false, width: 200 },
   { title: 'Base', key: 'baseImponible', sortable: true, width: 110 },
   { title: 'IVA', key: 'iva', sortable: true, width: 90 },
   { title: 'Importe', key: 'importe', sortable: true, width: 120 },
@@ -94,34 +166,49 @@ function toggleFacturaSeleccionada(id: number, checked: boolean) { const next = 
 function toggleSeleccionPagina(checked: boolean) { const next = new Set(selectedIds.value); facturas.value.forEach(f => checked ? next.add(f.id) : next.delete(f.id)); selectedIds.value = [...next] }
 
 function openCreate() { editingItem.value = null; form.value = { numeroFactura: '', fechaFactura: '', referencia: '', formaPago: '', importe: 0, baseImponible: 0, iva: 0, clienteId: null }; uploadFile.value = null; dialog.value = true }
-function openEdit(item: FacturaEmitidaDto) { editingItem.value = { ...item }; form.value = { numeroFactura: item.numeroFactura ?? '', fechaFactura: item.fechaFactura ?? '', referencia: item.referencia ?? '', formaPago: item.formaPago ?? '', importe: item.importe ?? 0, baseImponible: item.baseImponible ?? 0, iva: item.iva ?? 0, clienteId: item.clienteId ?? null }; dialog.value = true }
+function openEdit(item: FacturaEmitidaDto) { editingItem.value = { ...item }; form.value = { numeroFactura: item.numeroFactura ?? '', fechaFactura: item.fechaFactura ?? '', referencia: item.referencia ?? '', formaPago: item.formaPago ?? '', importe: item.importe ?? 0, baseImponible: item.baseImponible ?? 0, iva: item.iva ?? 0, clienteId: item.clienteId ?? null }; uploadFile.value = null; dialog.value = true }
 function openUpload(item: FacturaEmitidaDto) { editingItem.value = { ...item }; uploadFile.value = null; uploadDialog.value = true }
 
 async function fetchAll() {
+  const sort = sortBy.value[0]
+  const pg = page.value - 1
+  const sz = itemsPerPage.value === -1 ? 99999 : itemsPerPage.value
+  const cacheKey = buildCacheKey(pg, sz, sort)
+
+  const cached = pageCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    facturas.value = cached.content
+    totalItems.value = cached.totalElements
+    return
+  }
+
   loading.value = true
   try {
-    const sort = sortBy.value[0]
     const res = await $api<PageResponse<FacturaEmitidaDto>>('/facturas-emitidas', {
-      query: {
-        ...filtros.value,
-        page: page.value - 1,
-        size: itemsPerPage.value === -1 ? 99999 : itemsPerPage.value,
-        ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}),
-      },
+      query: { ...filtros.value, page: pg, size: sz, ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}) },
     })
     facturas.value = res.content
     totalItems.value = res.totalElements
+
+    if (pageCache.size >= MAX_CACHE_ENTRIES) {
+      const oldest = [...pageCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]
+      pageCache.delete(oldest[0])
+    }
+    pageCache.set(cacheKey, { content: res.content, totalElements: res.totalElements, ts: Date.now() })
+
     if (!clientes.value.length)
       clientes.value = await $api<ClienteDto[]>('/clientes')
   }
   finally { loading.value = false }
 }
 
+// Solo gestiona cambios de ordenación; página e itemsPerPage tienen sus propios handlers.
 async function handleTableOptions(options: { page: number; itemsPerPage: number; sortBy: { key: string; order: 'asc' | 'desc' }[] }) {
   if (!tableReady.value) return
-  page.value = options.page
-  itemsPerPage.value = options.itemsPerPage
-  sortBy.value = options.sortBy ?? []
+  const newSortBy = options.sortBy ?? []
+  const sortChanged = JSON.stringify(newSortBy) !== JSON.stringify(sortBy.value)
+  if (!sortChanged) return
+  sortBy.value = newSortBy
   await fetchAll()
 }
 
@@ -135,7 +222,7 @@ async function saveFactura() {
     else
       saved = await $api<FacturaEmitidaDto>('/facturas-emitidas', { method: 'POST', body: payload })
 
-    if (!editingItem.value?.id && uploadFile.value) {
+    if (uploadFile.value) {
       const file = Array.isArray(uploadFile.value) ? uploadFile.value[0] : uploadFile.value
       if (file) {
         const fd = new FormData()
@@ -145,6 +232,7 @@ async function saveFactura() {
     }
     showMsg('Factura guardada correctamente')
     dialog.value = false
+    limpiarCache()
     await fetchAll()
   } catch (e: any) { showMsg(e?.data?.message || 'Error al guardar', 'error') }
   finally { saving.value = false }
@@ -196,6 +284,7 @@ async function subirDocumento() {
     await $api(`/facturas-emitidas/${editingItem.value.id}/documento`, { method: 'POST', body: fd })
     showMsg('Documento guardado')
     uploadDialog.value = false
+    limpiarCache()
     await fetchAll()
   } catch (e: any) { showMsg(e?.data?.message || 'Error al guardar el documento', 'error') }
   finally { uploadLoading.value = false }
@@ -204,7 +293,7 @@ async function subirDocumento() {
 async function confirmDelete() {
   if (!deletingId.value) return
   deleting.value = true
-  try { await $api(`/facturas-emitidas/${deletingId.value}`, { method: 'DELETE' }); showMsg('Factura eliminada'); deleteDialog.value = false; await fetchAll() }
+  try { await $api(`/facturas-emitidas/${deletingId.value}`, { method: 'DELETE' }); showMsg('Factura eliminada'); deleteDialog.value = false; limpiarCache(); await fetchAll() }
   catch (e: any) { showMsg(e?.data?.message || 'Error al eliminar', 'error') }
   finally { deleting.value = false; deletingId.value = null }
 }
@@ -227,6 +316,7 @@ async function importarDesdeExcel() {
       '/facturas-emitidas/importar', { method: 'POST', body: fd }
     )
     importResultado.value = res
+    limpiarCache()
     await fetchAll()
   }
   catch (e: any) { showMsg(e?.data?.message || 'Error al importar', 'error') }
@@ -240,6 +330,7 @@ async function deleteSelected() {
     showMsg('Facturas eliminadas')
     bulkDeleteDialog.value = false
     limpiarSeleccion()
+    limpiarCache()
     await fetchAll()
   } catch (e: any) { showMsg(e?.data?.message || 'Error al eliminar', 'error') }
   finally { deleting.value = false }
@@ -258,7 +349,7 @@ onMounted(async () => {
       <VCardItem>
         <VCardTitle>Facturas Emitidas</VCardTitle>
         <template #append>
-          <VBtn   class="me-2" @click="openCreate">Nueva</VBtn>
+          <VBtn  class="me-2" @click="openCreate">Nueva</VBtn>
           <VMenu v-model="exportMenu" location="bottom end">
             <template #activator="{ props }"><VBtn v-bind="props" variant="tonal" class="me-2">Acciones</VBtn></template>
             <VList density="compact" min-width="220">
@@ -309,7 +400,18 @@ onMounted(async () => {
         <template #item.importe="{ item }">{{ formatMoney(item.importe) }}</template>
         <template #item.actions="{ item }">
           <div class="d-flex gap-1">
-            <IconBtn size="small" @click="openUpload(item)"><VIcon icon="tabler-upload" /></IconBtn>
+            <VTooltip :text="item.rutaDocumento ? 'Ver documento' : 'Subir documento'" location="top">
+              <template #activator="{ props }">
+                <IconBtn
+                  v-bind="props"
+                  size="small"
+                  :loading="previewLoadingId === item.id"
+                  @click.stop="item.rutaDocumento ? abrirVistaPrevia(item) : openUpload(item)"
+                >
+                  <VIcon :icon="item.rutaDocumento ? 'tabler-file-search' : 'tabler-upload'" />
+                </IconBtn>
+              </template>
+            </VTooltip>
             <IconBtn size="small" @click="openEdit(item)"><VIcon icon="tabler-edit" /></IconBtn>
             <IconBtn size="small" color="error" @click="deletingId = item.id; deleteDialog = true"><VIcon icon="tabler-trash" /></IconBtn>
           </div>
@@ -355,13 +457,15 @@ onMounted(async () => {
         <DialogCloseBtn @click="dialog = false" />
         <VCardText>
           <VRow>
-            <VCol v-if="!editingItem" cols="12">
+            <VCol cols="12">
               <VFileInput
                 v-model="uploadFile"
-                label="PDF o imagen"
+                :label="editingItem ? 'Reemplazar documento (opcional)' : 'PDF o imagen'"
                 accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/*"
                 prepend-icon="tabler-file-upload"
-                hint="Opcional: sube el documento y pulsa Procesar con IA para autocompletar"
+                :hint="editingItem
+                  ? (editingItem.rutaDocumento ? 'Ya tiene documento adjunto. Sube uno nuevo para reemplazarlo.' : 'Sin documento adjunto. Sube uno para añadirlo.')
+                  : 'Opcional: sube el documento y pulsa Procesar con IA para autocompletar'"
                 persistent-hint
               />
               <div class="d-flex gap-2 mt-2">
@@ -397,7 +501,7 @@ onMounted(async () => {
         </VCardText>
         <VCardActions class="justify-end pb-4 px-6">
           <VBtn variant="tonal" @click="uploadDialog = false">Cancelar</VBtn>
-          <VBtn :loading="uploadLoading" @click="subirDocumento">Guardar documento</VBtn>
+          <VBtn :loading="uploadLoading" :disabled="!uploadFile" @click="subirDocumento">Guardar documento</VBtn>
         </VCardActions>
       </VCard>
     </VDialog>
@@ -442,6 +546,32 @@ onMounted(async () => {
           <VBtn variant="tonal" @click="importDialog = false">Cerrar</VBtn>
           <VBtn :loading="importLoading" :disabled="!importFile" @click="importarDesdeExcel">Importar</VBtn>
         </VCardActions>
+      </VCard>
+    </VDialog>
+
+    <!-- Visor documento -->
+    <VDialog v-model="pdfDialogOpen" max-width="960" max-height="90vh" scrollable>
+      <VCard>
+        <VCardTitle class="d-flex align-center pa-3">
+          <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+          Documento
+          <VSpacer />
+          <VBtn
+            v-if="pdfUrl"
+            variant="tonal"
+            size="small"
+            class="me-2"
+            :href="pdfUrl"
+            :download="pdfFilename"
+          >
+            <VIcon icon="tabler-download" class="me-1" size="16" />Descargar
+          </VBtn>
+          <IconBtn @click="pdfDialogOpen = false"><VIcon icon="tabler-x" /></IconBtn>
+        </VCardTitle>
+        <VCardText class="pa-0 d-flex align-center justify-center" style="height: 80vh; overflow: auto;">
+          <img v-if="pdfUrl && pdfMime.startsWith('image/')" :src="pdfUrl" alt="Documento adjunto" style="max-width:100%;max-height:100%;object-fit:contain;" />
+          <iframe v-else-if="pdfUrl" :key="pdfUrl" :src="pdfUrl" title="Documento adjunto" style="width:100%;height:100%;border:none;" />
+        </VCardText>
       </VCard>
     </VDialog>
 

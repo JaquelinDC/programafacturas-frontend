@@ -31,6 +31,20 @@ const itemsPerPageOptions = [
 ]
 const selectedFacturaIds = ref<number[]>([])
 
+// ─── Caché de páginas ─────────────────────────────────────────────────────────
+const CACHE_TTL_MS = 2 * 60 * 1000
+const MAX_CACHE_ENTRIES = 20
+interface CacheEntry { content: FacturaProveedorDto[]; totalElements: number; ts: number }
+const pageCache = new Map<string, CacheEntry>()
+
+function buildCacheKey(body: FacturaFiltrosRequest, pg: number, sz: number, sort?: { key: string; order: string }) {
+  return JSON.stringify({ ...body, page: pg, size: sz, ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}) })
+}
+
+function limpiarCache() {
+  pageCache.clear()
+}
+
 // ─── Filtros ──────────────────────────────────────────────────────────────────
 const filtros = ref<FacturaFiltrosRequest>({})
 const busquedaLista = ref('')
@@ -137,23 +151,35 @@ function aplicarFiltroRapido(patch: Partial<FacturaFiltrosRequest>) {
 
 // ─── Búsqueda ─────────────────────────────────────────────────────────────────
 async function buscar() {
+  const body = sanitizarFiltros(filtros.value)
+  busquedaLista.value = JSON.stringify(body)
+  guardarFiltros()
+  guardarItemsPerPage()
+  const sort = sortBy.value[0]
+  const pg = page.value - 1
+  const sz = itemsPerPage.value === -1 ? 99999 : itemsPerPage.value
+  const cacheKey = buildCacheKey(body, pg, sz, sort)
+
+  const cached = pageCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    facturas.value = cached.content
+    totalItems.value = cached.totalElements
+    return
+  }
+
   loading.value = true
   try {
-    const body = sanitizarFiltros(filtros.value)
-    busquedaLista.value = JSON.stringify(body)
-    guardarFiltros()
-    guardarItemsPerPage()
-    const sort = sortBy.value[0]
     const response = await $api<{ content: FacturaProveedorDto[]; page: number; size: number; totalElements: number }>('/facturas', {
-      query: {
-        ...body,
-        page: page.value - 1,
-        size: itemsPerPage.value === -1 ? 99999 : itemsPerPage.value,
-        ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}),
-      },
+      query: { ...body, page: pg, size: sz, ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}) },
     })
     facturas.value = response.content
     totalItems.value = response.totalElements
+
+    if (pageCache.size >= MAX_CACHE_ENTRIES) {
+      const oldest = [...pageCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]
+      pageCache.delete(oldest[0])
+    }
+    pageCache.set(cacheKey, { content: response.content, totalElements: response.totalElements, ts: Date.now() })
   }
   catch (e) {
     console.error(e)
@@ -187,12 +213,14 @@ function limpiarFiltros() {
   buscar()
 }
 
-// Llamado por VDataTableServer cuando cambia página, tamaño o columna de ordenación
+// Llamado por VDataTableServer — solo gestiona cambios de ordenación;
+// página e itemsPerPage tienen sus propios handlers para evitar llamadas dobles.
 async function handleTableOptions(options: { page: number; itemsPerPage: number; sortBy: { key: string; order: 'asc' | 'desc' }[] }) {
   if (!tableReady.value) return
-  page.value = options.page
-  itemsPerPage.value = options.itemsPerPage
-  sortBy.value = options.sortBy ?? []
+  const newSortBy = options.sortBy ?? []
+  const sortChanged = JSON.stringify(newSortBy) !== JSON.stringify(sortBy.value)
+  if (!sortChanged) return
+  sortBy.value = newSortBy
   await buscar()
 }
 
@@ -215,16 +243,18 @@ const entidadesItems = computed(() =>
 
 // ─── Tabla ────────────────────────────────────────────────────────────────────
 const headers = [
-  { title: 'ID', key: 'id', width: 70, sortable: true },
+  { title: 'ID', key: 'id', width: 50, sortable: true },
   { title: 'Tipo', key: 'tipo', width: 110, sortable: true },
   { title: 'Fecha', key: 'fechaFactura', width: 150, sortable: true },
   { title: 'Proveedor', key: 'proveedorFacturaNombre', width: 200, sortable: true },
-  { title: 'Entidad', key: 'entidadNombre', width: 160, sortable: false },
+  { title: 'Cuenta Aplicada', key: 'entidadNombre', width: 160, sortable: false },
   { title: 'Nº Factura', key: 'numeroFactura', width: 120, sortable: true },
-  { title: 'Base', key: 'baseImponible', width: 100, sortable: true },
-  { title: 'IVA', key: 'iva', width: 90, sortable: true },
-  { title: 'Total', key: 'importeTotal', width: 110, sortable: true },
-  { title: '', key: 'actions', sortable: false, width: 60 },
+  { title: 'Base', key: 'baseImponible', width: 80, sortable: true },
+  { title: 'IVA', key: 'iva', width: 80, sortable: true },
+  { title: 'IRPF', key: 'irpf', width: 80, sortable: true },
+  { title: 'Export. Contab.', key: 'fechaExportacionContabilidad', width: 100, sortable: true },
+  { title: 'Importe', key: 'importeTotal', width: 110, sortable: true },
+  { title: 'Acciones', key: 'actions', sortable: false, width: 400 },
 ]
 
 // ─── Row color by estado ──────────────────────────────────────────────────────
@@ -356,6 +386,7 @@ async function recalcularIncidencias() {
   try {
     const result = await $api<{ procesadas: number; mensaje: string }>('/facturas/recalcular-incidencias', { method: 'POST' })
     showMsg(result.mensaje, 'success')
+    limpiarCache()
     await buscar()
   }
   catch {
@@ -374,6 +405,7 @@ async function procesarCarpeta() {
       { method: 'POST' },
     )
     showMsg(result.mensaje, 'success')
+    limpiarCache()
     await buscar()
   }
   catch (e) {
@@ -397,6 +429,7 @@ async function reprocesarIaSeleccion() {
     if (result.mensajesError?.length)
       console.warn('Errores reproceso IA', result.mensajesError)
     limpiarSeleccion()
+    limpiarCache()
     await buscar()
   }
   catch (e: any) {
@@ -404,6 +437,78 @@ async function reprocesarIaSeleccion() {
   }
   finally {
     loading.value = false
+  }
+}
+
+// ─── Validar factura ─────────────────────────────────────────────────────────
+const validandoId = ref<number | null>(null)
+
+async function validarFactura(item: FacturaProveedorDto) {
+  validandoId.value = item.id
+  try {
+    const result = await $api<{ ok: boolean; error?: string }>(`/facturas/${item.id}/validar/ajax`, { method: 'POST' })
+    if (!result.ok) {
+      showMsg(result.error || 'No se pudo validar la factura', 'error')
+      return
+    }
+    const found = facturas.value.find(f => f.id === item.id)
+    if (found) found.estado = 'VALIDADA'
+    limpiarCache()
+    showMsg('Factura validada correctamente', 'success')
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo validar la factura', 'error')
+  }
+  finally {
+    validandoId.value = null
+  }
+}
+
+// ─── Gestionar IA por fila ────────────────────────────────────────────────────
+const procesandoIaId = ref<number | null>(null)
+
+async function gestionarIa(item: FacturaProveedorDto) {
+  procesandoIaId.value = item.id
+  try {
+    await $api(`/facturas/${item.id}/procesar-ia`, { method: 'POST' })
+    showMsg('Procesado con IA correctamente', 'success')
+    limpiarCache()
+    await buscar()
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo procesar con IA', 'error')
+  }
+  finally {
+    procesandoIaId.value = null
+  }
+}
+
+// ─── Eliminar factura ─────────────────────────────────────────────────────────
+const deleteDialogOpen = ref(false)
+const facturaToDelete = ref<FacturaProveedorDto | null>(null)
+const deleteLoading = ref(false)
+
+function confirmarEliminar(item: FacturaProveedorDto) {
+  facturaToDelete.value = item
+  deleteDialogOpen.value = true
+}
+
+async function eliminarFactura() {
+  if (!facturaToDelete.value) return
+  deleteLoading.value = true
+  try {
+    await $api(`/facturas/${facturaToDelete.value.id}`, { method: 'DELETE' })
+    showMsg('Factura eliminada correctamente', 'success')
+    deleteDialogOpen.value = false
+    facturaToDelete.value = null
+    limpiarCache()
+    await buscar()
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudo eliminar la factura', 'error')
+  }
+  finally {
+    deleteLoading.value = false
   }
 }
 
@@ -791,6 +896,8 @@ onMounted(async () => {
         <template #item.fechaFactura="{ item }">{{ formatDate(item.fechaFactura) }}</template>
         <template #item.baseImponible="{ item }">{{ formatMoney(item.baseImponible) }}</template>
         <template #item.iva="{ item }">{{ formatMoney(item.iva) }}</template>
+        <template #item.irpf="{ item }">{{ formatMoney(item.irpf) }}</template>
+        <template #item.fechaExportacionContabilidad="{ item }">{{ formatDate(item.fechaExportacionContabilidad) }}</template>
         <template #item.importeTotal="{ item }">{{ formatMoney(item.importeTotal) }}</template>
         <template #item.proveedorFacturaNombre="{ item }">
           <span>{{ item.proveedorFacturaNombre ?? '—' }}</span>
@@ -803,13 +910,52 @@ onMounted(async () => {
           <VIcon v-if="item.rutaPdf" icon="tabler-file-type-pdf" size="14" color="error" class="ms-1" />
         </template>
         <template #item.actions="{ item }">
-          <VTooltip :text="item.rutaPdf ? 'Ver documento' : 'Ver detalle'" location="top">
-            <template #activator="{ props }">
-              <IconBtn v-bind="props" size="small" :loading="previewLoadingId === item.id" @click.stop="abrirVistaPrevia(item)">
-                <VIcon :icon="item.rutaPdf ? 'tabler-file-search' : 'tabler-eye'" />
-              </IconBtn>
-            </template>
-          </VTooltip>
+          <div class="d-flex align-center flex-wrap gap-1">
+            <!--Btn Validar (solo PENDIENTE_REVISION)-->
+            <VBtn
+              v-if="item.estado === 'PENDIENTE_REVISION'"
+              size="x-small"
+              color="secondary"
+              variant="tonal"
+              :loading="validandoId === item.id"
+              @click.stop="validarFactura(item)"
+            >Validar</VBtn>
+           
+            <!--Btn Gestionar IA (pendiente revisión, con PDF, no procesada aún)-->
+            <VBtn
+              v-if="item.rutaPdf && !item.procesadaIa && item.estado === 'PENDIENTE_REVISION'"
+              size="x-small"
+              color="secondary"
+              variant="tonal"
+              prepend-icon="tabler-sparkles"
+              :loading="procesandoIaId === item.id"
+              @click.stop="gestionarIa(item)"
+            >Gestionar IA</VBtn>
+            <!--Badge Procesada IA-->
+            <VChip
+              v-if="item.procesadaIa"
+              size="x-small"
+              color="info"
+              label
+              prepend-icon="tabler-robot"
+            >Procesada IA</VChip>
+             <!--Btn Ver Documento-->
+            <VTooltip :text="item.rutaPdf ? 'Ver documento' : 'Ver detalle'" location="top">
+              <template #activator="{ props }">
+                <IconBtn v-bind="props" size="small" :loading="previewLoadingId === item.id" @click.stop="abrirVistaPrevia(item)">
+                  <VIcon :icon="item.rutaPdf ? 'tabler-file-search' : 'tabler-eye'" />
+                </IconBtn>
+              </template>
+            </VTooltip>
+            <!--Btn Eliminar-->
+            <VTooltip text="Eliminar factura" location="top">
+              <template #activator="{ props }">
+                <IconBtn v-bind="props" size="small" color="error" @click.stop="confirmarEliminar(item)">
+                  <VIcon icon="tabler-trash" />
+                </IconBtn>
+              </template>
+            </VTooltip>
+          </div>
         </template>
         <template #bottom>
           <VDivider />
@@ -911,6 +1057,26 @@ onMounted(async () => {
         <VCardText class="pa-0" style="height: 80vh;">
           <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
         </VCardText>
+      </VCard>
+    </VDialog>
+
+    <!-- Diálogo confirmar eliminación -->
+    <VDialog v-model="deleteDialogOpen" max-width="420">
+      <VCard>
+        <VCardTitle class="pa-4">Eliminar factura</VCardTitle>
+        <VCardText>
+          <p class="text-body-2">
+            ¿Estás seguro de que deseas eliminar la factura
+            <strong>#{{ facturaToDelete?.id }}</strong>
+            <template v-if="facturaToDelete?.proveedorFacturaNombre"> de <strong>{{ facturaToDelete.proveedorFacturaNombre }}</strong></template>?
+            Esta acción no se puede deshacer.
+          </p>
+        </VCardText>
+        <VCardActions class="pa-4">
+          <VSpacer />
+          <VBtn variant="tonal" @click="deleteDialogOpen = false">Cancelar</VBtn>
+          <VBtn color="error" :loading="deleteLoading" @click="eliminarFactura">Eliminar</VBtn>
+        </VCardActions>
       </VCard>
     </VDialog>
 
