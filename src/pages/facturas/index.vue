@@ -247,6 +247,7 @@ const headers = [
   { title: 'Tipo', key: 'tipo', width: 110, sortable: true },
   { title: 'Fecha', key: 'fechaFactura', width: 150, sortable: true },
   { title: 'Proveedor', key: 'proveedorFacturaNombre', width: 200, sortable: true },
+  { title: '', key: 'incidencias', width: 40, sortable: false },
   { title: 'Cuenta Aplicada', key: 'entidadNombre', width: 160, sortable: false },
   { title: 'Nº Factura', key: 'numeroFactura', width: 120, sortable: true },
   { title: 'Base', key: 'baseImponible', width: 80, sortable: true },
@@ -260,7 +261,11 @@ const headers = [
 // ─── Row color by estado ──────────────────────────────────────────────────────
 function rowProps({ item }: { item: FacturaProveedorDto }) {
   const color = estadoColor[item.estado ?? '']
-  return color ? { class: `row-estado-${color}` } : {}
+  const classes = [
+    color ? `row-estado-${color}` : '',
+    item.incidencias ? 'row-con-incidencia' : '',
+  ].filter(Boolean).join(' ')
+  return classes ? { class: classes } : {}
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
@@ -901,13 +906,21 @@ onMounted(async () => {
         <template #item.importeTotal="{ item }">{{ formatMoney(item.importeTotal) }}</template>
         <template #item.proveedorFacturaNombre="{ item }">
           <span>{{ item.proveedorFacturaNombre ?? '—' }}</span>
-          <VTooltip v-if="item.incidencias" location="top">
+        </template>
+        <template #item.incidencias="{ item }">
+          <VTooltip v-if="item.incidencias" location="top" max-width="300">
             <template #activator="{ props }">
-              <VIcon v-bind="props" icon="tabler-alert-triangle" size="14" color="warning" class="ms-1" />
+              <VChip
+                v-bind="props"
+                color="warning"
+                size="x-small"
+                label
+                prepend-icon="tabler-alert-triangle"
+                class="cursor-pointer"
+              >!</VChip>
             </template>
             <span>{{ item.incidencias }}</span>
           </VTooltip>
-          <VIcon v-if="item.rutaPdf" icon="tabler-file-type-pdf" size="14" color="error" class="ms-1" />
         </template>
         <template #item.actions="{ item }">
           <div class="d-flex align-center flex-wrap gap-1">
@@ -1088,6 +1101,8 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+:deep(.row-con-incidencia td:first-child) { border-left: 3px solid rgb(var(--v-theme-warning)) !important; }
+
 :deep(.row-estado-warning td) { background-color: rgba(var(--v-theme-warning), 0.10) !important; }
 :deep(.row-estado-info td)    { background-color: rgba(var(--v-theme-info), 0.10) !important; }
 :deep(.row-estado-success td) { background-color: rgba(var(--v-theme-success), 0.10) !important; }
