@@ -503,7 +503,6 @@ declare module 'vue' {
     readonly resolveUnref: UnwrapRef<typeof import('@vueuse/core')['resolveUnref']>
     readonly resolveVuetifyTheme: UnwrapRef<typeof import('./src/@core/utils/vuetify')['resolveVuetifyTheme']>
     readonly rgbaToHex: UnwrapRef<typeof import('./src/@core/utils/colorConverter')['rgbaToHex']>
-    readonly sendAiChatMessage: UnwrapRef<typeof import('./src/utils/ai-chat')['sendAiChatMessage']>
     readonly setActivePinia: UnwrapRef<typeof import('pinia')['setActivePinia']>
     readonly setMapStoreSuffix: UnwrapRef<typeof import('pinia')['setMapStoreSuffix']>
     readonly shallowReactive: UnwrapRef<typeof import('vue')['shallowReactive']>

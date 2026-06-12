@@ -5,7 +5,7 @@ import { breakpointsVuetify } from '@vueuse/core'
 export const layoutConfig: LayoutConfig = {
   app: {
     title: 'my-layout',
-    logo: h('img', { src: '/src/assets/images/tracom/logoTracom.png', style: 'height: 40px' }),
+    logo: h('img', { src: '/src/assets/images/softit/logo-softIT.png', style: 'height: 40px' }),
     contentWidth: ContentWidth.Fluid,
     contentLayoutNav: AppContentLayoutNav.Vertical,
     overlayNavFromBreakpoint: breakpointsVuetify.md,
