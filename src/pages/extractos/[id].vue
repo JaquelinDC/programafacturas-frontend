@@ -180,9 +180,17 @@ const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleStr
 function estadoMovimiento(mov: ExtractoBancarioMovimientoDto) {
   if (mov.excluidoConciliacion) return { label: 'Excluido', color: 'default' }
   if (mov.conceptoNoConciliable) return { label: 'No conciliable', color: 'secondary' }
-  if (mov.facturaProveedorId) return { label: 'Conciliado (factura)', color: 'success' }
+  if (facturasVinculadas(mov).length) return { label: 'Conciliado (factura)', color: 'success' }
   if (mov.pagoId) return { label: 'Conciliado (pago)', color: 'success' }
   return { label: 'Pendiente', color: 'warning' }
+}
+
+function facturasVinculadas(mov: ExtractoBancarioMovimientoDto) {
+  if (mov.facturasProveedor?.length) return mov.facturasProveedor
+  if (mov.facturaProveedorId) {
+    return [{ id: mov.facturaProveedorId, numeroFactura: mov.facturaProveedorNumero }]
+  }
+  return []
 }
 
 const importeColor = (n?: number) => {
@@ -239,6 +247,12 @@ onMounted(async () => {
           Periodo: {{ formatDate(extracto.fechaInicioMovimientos) }} → {{ formatDate(extracto.fechaFinMovimientos) }}
         </span>
       </div>
+      <VBtn
+        color="primary"
+        :to="`/pagos/extractos/${id}/conciliacion/preview`"
+      >
+        Conciliar
+      </VBtn>
       <VBtn
         v-if="extracto.nombreFichero"
         variant="tonal"
@@ -312,15 +326,18 @@ onMounted(async () => {
         </template>
 
         <template #item.facturaProveedorNumero="{ item }">
-          <VBtn
-            v-if="item.facturaProveedorId"
-            variant="text"
-            size="small"
-            :to="`/facturas/${item.facturaProveedorId}`"
-            @click.stop
-          >
-            {{ item.facturaProveedorNumero ?? `#${item.facturaProveedorId}` }}
-          </VBtn>
+          <div v-if="facturasVinculadas(item).length" class="d-flex flex-wrap gap-1">
+            <VBtn
+              v-for="factura in facturasVinculadas(item)"
+              :key="factura.id"
+              variant="text"
+              size="small"
+              :to="`/facturas/${factura.id}`"
+              @click.stop
+            >
+              {{ factura.numeroFactura ?? `#${factura.id}` }}
+            </VBtn>
+          </div>
           <span v-else class="text-disabled">—</span>
         </template>
 

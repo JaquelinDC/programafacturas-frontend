@@ -29,6 +29,7 @@ const emptyForm = () => ({
   codigoPostal: '',
   localidad: '',
   codigoContable: '',
+  aliasesConciliacion: '',
 })
 
 const form = ref(emptyForm())
@@ -43,6 +44,7 @@ watch(() => props.modelValue, open => {
       codigoPostal: props.proveedor?.codigoPostal ?? '',
       localidad: props.proveedor?.localidad ?? '',
       codigoContable: props.proveedor?.codigoContable ?? '',
+      aliasesConciliacion: props.proveedor?.aliasesConciliacion ?? '',
     }
   }
 })
@@ -107,6 +109,14 @@ async function save() {
             </VCol>
             <VCol cols="12" sm="8">
               <AppTextField v-model="form.localidad" label="Localidad" />
+            </VCol>
+            <VCol cols="12">
+              <AppTextarea
+                v-model="form.aliasesConciliacion"
+                label="Aliases conciliacion"
+                rows="3"
+                placeholder="Una variante por linea o separadas por coma"
+              />
             </VCol>
           </VRow>
         </VForm>

@@ -51,6 +51,7 @@ export interface ProveedorFacturaDto {
   codigoPostal?: string
   localidad?: string
   codigoContable?: string
+  aliasesConciliacion?: string
 }
 
 export interface ClienteDto {
@@ -154,10 +155,19 @@ export interface FacturaConciliacionImporteMovimientoDto {
   extractoEtiqueta?: string
   fechaMovimiento?: string
   concepto?: string
+  observaciones?: string
   importe?: number
   conceptoOk: boolean
+  score: number
+  confidence?: string
+  reasons: string[]
   facturaProveedorId?: number
   facturaProveedorNumero?: string
+}
+
+export interface FacturaProveedorResumenDto {
+  id?: number
+  numeroFactura?: string
 }
 
 export interface FacturaConciliacionImporteDto {
@@ -226,6 +236,7 @@ export interface ExtractoBancarioMovimientoDto {
   pagoId?: number
   facturaProveedorId?: number
   facturaProveedorNumero?: string
+  facturasProveedor: FacturaProveedorResumenDto[]
 }
 
 export interface ConceptoNoConciliableDto {
@@ -249,6 +260,7 @@ export interface MovimientoBancarioAdminDto {
   pagoId?: number
   facturaProveedorId?: number
   facturaProveedorNumero?: string
+  facturasProveedor: FacturaProveedorResumenDto[]
 }
 
 export interface PagoDto {

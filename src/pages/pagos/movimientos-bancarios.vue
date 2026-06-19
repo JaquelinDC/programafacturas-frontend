@@ -25,9 +25,17 @@ const formatMoney = (n?: number) => n == null ? '—' : `${Number(n).toLocaleStr
 function estado(m: MovimientoBancarioAdminDto) {
   if (m.excluidoConciliacion) return { label: 'Excluido', color: 'default' }
   if (m.conceptoNoConciliable) return { label: 'No conciliable', color: 'secondary' }
-  if (m.facturaProveedorId) return { label: 'Factura', color: 'success' }
+  if (facturasVinculadas(m).length) return { label: 'Factura', color: 'success' }
   if (m.pagoId) return { label: 'Pago', color: 'success' }
   return { label: 'Pendiente', color: 'warning' }
+}
+
+function facturasVinculadas(m: MovimientoBancarioAdminDto) {
+  if (m.facturasProveedor?.length) return m.facturasProveedor
+  if (m.facturaProveedorId) {
+    return [{ id: m.facturaProveedorId, numeroFactura: m.facturaProveedorNumero }]
+  }
+  return []
 }
 
 async function cargar() {
@@ -72,9 +80,18 @@ onMounted(cargar)
         </VBtn>
       </template>
       <template #item.factura="{ item }">
-        <VBtn v-if="item.facturaProveedorId" variant="text" size="small" :to="`/facturas/${item.facturaProveedorId}`" @click.stop>
-          {{ item.facturaProveedorNumero ?? `#${item.facturaProveedorId}` }}
-        </VBtn>
+        <div v-if="facturasVinculadas(item).length" class="d-flex flex-wrap gap-1">
+          <VBtn
+            v-for="factura in facturasVinculadas(item)"
+            :key="factura.id"
+            variant="text"
+            size="small"
+            :to="`/facturas/${factura.id}`"
+            @click.stop
+          >
+            {{ factura.numeroFactura ?? `#${factura.id}` }}
+          </VBtn>
+        </div>
       </template>
       <template #bottom="{ pageCount }">
         <VDivider />
