@@ -27,17 +27,40 @@ const router = createRouter({
   ],
 })
 
-// ─── Guardia de autenticación ─────────────────────────────────────────────────
+function getRoleFromToken(token: unknown): string | null {
+  if (typeof token !== 'string')
+    return null
+
+  const payload = token.split('.')[1]
+  if (!payload)
+    return null
+
+  try {
+    const normalizedPayload = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = JSON.parse(atob(normalizedPayload))
+
+    return decoded.rol ?? decoded.role ?? null
+  }
+  catch {
+    return null
+  }
+}
+
 router.beforeEach(to => {
   const isPublic = to.meta?.public === true
   const accessToken = useCookie('accessToken').value
+  const tokenRole = getRoleFromToken(accessToken)
 
-  // Redirigir a login si la ruta no es pública y no hay token
   if (!isPublic && !accessToken)
     return { path: '/login', query: { redirect: to.fullPath } }
 
-  // Redirigir al inicio si ya está autenticado y va al login
   if (isPublic && accessToken && to.path === '/login')
+    return { path: '/' }
+
+  if (to.meta?.requiresSuperAdmin && tokenRole && tokenRole !== 'SUPERADMIN')
+    return { path: '/' }
+
+  if (to.meta?.requiresAdmin && tokenRole && tokenRole !== 'ADMINISTRADOR' && tokenRole !== 'SUPERADMIN')
     return { path: '/' }
 })
 

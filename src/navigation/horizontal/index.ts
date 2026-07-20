@@ -39,7 +39,9 @@ export default [
     title: 'Administración',
     icon: { icon: 'tabler-shield-lock' },
     children: [
+      { title: 'Panel admin', to: { name: 'admin' } },
       { title: 'Usuarios', to: { name: 'usuarios' } },
+      { title: 'Empresas', to: { name: 'admin-empresas' } },
     ],
   },
 ]

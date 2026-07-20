@@ -80,6 +80,11 @@ export default [
   },
   { heading: 'Administración' },
   {
+    title: 'Panel admin',
+    to: { name: 'admin' },
+    icon: { icon: 'tabler-shield-lock' },
+  },
+  {
     title: 'Usuarios',
     to: { name: 'usuarios' },
     icon: { icon: 'tabler-user-cog' },

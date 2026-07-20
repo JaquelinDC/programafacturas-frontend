@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { useCrud } from '@/composables/useCrud'
 import { useAuthStore } from '@/stores/auth'
-import type { UsuarioDto } from '@/types/api'
+import type { EmpresaDto, UsuarioDto } from '@/types/api'
+import { $api } from '@/utils/api'
 
-definePage({ meta: { title: 'Usuarios' } })
+definePage({ meta: { title: 'Usuarios', requiresAdmin: true } })
 
 const authStore = useAuthStore()
 
@@ -13,14 +14,24 @@ const {
   openCreate, openEdit, openDelete, confirmDelete, save,
 } = useCrud<UsuarioDto>('/usuarios')
 
-const rolesOptions = ['SUPERADMIN', 'ADMINISTRADOR', 'ADMINISTRATIVO']
+const empresas = ref<EmpresaDto[]>([])
+const rolesOptions = computed(() =>
+  authStore.isSuperAdmin
+    ? ['SUPERADMIN', 'ADMINISTRADOR', 'ADMINISTRATIVO']
+    : ['ADMINISTRADOR', 'ADMINISTRATIVO'],
+)
+const empresasOptions = computed(() => empresas.value.map(empresa => ({
+  title: empresa.nombre,
+  value: empresa.id,
+})))
 
 const form = ref({
   username: '',
   password: '',
   nombreCompleto: '',
-  rol: 'USUARIO',
+  rol: 'ADMINISTRATIVO',
   activo: true,
+  empresaId: null as number | null,
 })
 
 const isPasswordVisible = ref(false)
@@ -34,22 +45,42 @@ watch(dialog, open => {
       nombreCompleto: editingItem.value?.nombreCompleto ?? '',
       rol: editingItem.value?.rol ?? 'ADMINISTRATIVO',
       activo: editingItem.value?.activo ?? true,
+      empresaId: editingItem.value?.empresaId ?? authStore.empresaId ?? null,
     }
   }
 })
 
+watch(() => form.value.rol, rol => {
+  if (rol === 'SUPERADMIN')
+    form.value.empresaId = null
+  else if (!form.value.empresaId && !authStore.isSuperAdmin)
+    form.value.empresaId = authStore.empresaId
+})
+
 function handleSave() {
-  // En edición, la contraseña es opcional
   const body: Record<string, unknown> = { ...form.value }
+  if (!authStore.isSuperAdmin)
+    body.empresaId = authStore.empresaId
+  if (body.rol === 'SUPERADMIN')
+    body.empresaId = null
   if (editingItem.value && !body.password)
     delete body.password
   save(body as any)
 }
 
+async function fetchEmpresas() {
+  if (!authStore.isSuperAdmin)
+    return
+  empresas.value = await $api<EmpresaDto[]>('/admin/empresas')
+}
+
+onMounted(fetchEmpresas)
+
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
   { title: 'Usuario', key: 'username', width: 150 },
   { title: 'Nombre completo', key: 'nombreCompleto' },
+  { title: 'Empresa', key: 'empresaNombre' },
   { title: 'Rol', key: 'rol', width: 150 },
   { title: 'Activo', key: 'activo', width: 100 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
@@ -107,6 +138,9 @@ const rolColors: Record<string, string> = {
         item-value="id"
         hover
       >
+        <template #item.empresaNombre="{ item }">
+          {{ item.empresaNombre || '-' }}
+        </template>
         <template #item.rol="{ item }">
           <VChip :color="rolColors[item.rol] ?? 'default'" size="small" label>{{ item.rol }}</VChip>
         </template>
@@ -129,7 +163,7 @@ const rolColors: Record<string, string> = {
           <VDivider />
           <div class="d-flex align-center justify-sm-space-between justify-center flex-wrap gap-3 px-6 py-3">
             <div class="d-flex align-center gap-2">
-              <span class="text-disabled text-body-2">Filas por página:</span>
+              <span class="text-disabled text-body-2">Filas por pagina:</span>
               <AppSelect v-model="itemsPerPage" :items="[10, 25, 50, 100, { title: 'Todos', value: -1 }]" density="compact" style="width: 90px" />
             </div>
             <VPagination
@@ -144,7 +178,7 @@ const rolColors: Record<string, string> = {
       </VDataTable>
     </VCard>
 
-    <VDialog v-model="dialog" max-width="520" persistent>
+    <VDialog v-model="dialog" max-width="620" persistent>
       <VCard :title="editingItem ? 'Editar usuario' : 'Nuevo usuario'">
         <DialogCloseBtn @click="dialog = false" />
         <VCardText>
@@ -156,7 +190,7 @@ const rolColors: Record<string, string> = {
               <VCol cols="12" sm="6">
                 <AppTextField
                   v-model="form.password"
-                  :label="editingItem ? 'Nueva contraseña (opcional)' : 'Contraseña *'"
+                  :label="editingItem ? 'Nueva contrasena (opcional)' : 'Contrasena *'"
                   :type="isPasswordVisible ? 'text' : 'password'"
                   :append-inner-icon="isPasswordVisible ? 'tabler-eye-off' : 'tabler-eye'"
                   :required="!editingItem"
@@ -168,6 +202,17 @@ const rolColors: Record<string, string> = {
               </VCol>
               <VCol cols="12" sm="6">
                 <AppSelect v-model="form.rol" label="Rol" :items="rolesOptions" />
+              </VCol>
+              <VCol v-if="authStore.isSuperAdmin && form.rol !== 'SUPERADMIN'" cols="12" sm="6">
+                <AppSelect
+                  v-model="form.empresaId"
+                  label="Empresa *"
+                  :items="empresasOptions"
+                  required
+                />
+              </VCol>
+              <VCol v-else-if="!authStore.isSuperAdmin" cols="12" sm="6">
+                <AppTextField :model-value="authStore.empresaNombre || '-'" label="Empresa" disabled />
               </VCol>
               <VCol cols="12" sm="6" class="d-flex align-center">
                 <VSwitch v-model="form.activo" label="Activo" color="primary" />
@@ -184,7 +229,7 @@ const rolColors: Record<string, string> = {
 
     <VDialog v-model="deleteDialog" max-width="420">
       <VCard title="Eliminar usuario">
-        <VCardText>¿Estás seguro de que quieres eliminar este usuario?</VCardText>
+        <VCardText>Estas seguro de que quieres eliminar este usuario?</VCardText>
         <VCardActions class="justify-end">
           <VBtn variant="tonal" @click="deleteDialog = false">Cancelar</VBtn>
           <VBtn color="error" :loading="saving" @click="confirmDelete">Eliminar</VBtn>
