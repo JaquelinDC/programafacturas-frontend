@@ -184,78 +184,117 @@ onMounted(cargar)
 
       <VProgressLinear v-if="cargando" indeterminate class="mb-4" />
 
-      <VTable v-else density="compact">
-        <thead>
-          <tr>
-            <th style="width: 110px;">Fecha</th>
-            <th>Concepto</th>
-            <th class="text-right" style="width: 130px;">Importe</th>
-            <th style="width: 520px;">Facturas candidatas</th>
-            <th style="width: 180px;">Accion</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="item in items" :key="item.movimiento.id">
-            <td>{{ formatDate(item.movimiento.fechaMovimiento) }}</td>
-            <td>
-              <div class="text-body-2">{{ item.movimiento.concepto }}</div>
-              <div v-if="facturasVinculadas(item.movimiento).length" class="d-flex flex-wrap align-center ga-2 mt-1">
-                <span class="text-caption text-success">Vinculadas:</span>
-                <VChip
-                  v-for="facturaVinculada in facturasVinculadas(item.movimiento)"
-                  :key="facturaVinculada.id ?? facturaVinculada.numeroFactura"
-                  size="small"
-                  color="success"
-                  variant="tonal"
-                >
-                  <span>{{ facturaVinculada.numeroFactura || `#${facturaVinculada.id}` }}</span>
-                  <VBtn
-                    v-if="facturaVinculada.id != null"
-                    icon
-                    size="x-small"
-                    variant="text"
-                    color="success"
-                    :loading="guardando"
-                    class="ml-1"
-                    @click.stop="desconciliarUna(item.movimiento.id, facturaVinculada.id)"
+      <VRow v-else>
+        <VCol
+          v-for="item in items"
+          :key="item.movimiento.id"
+          cols="12"
+        >
+          <VCard variant="outlined">
+            <VCardText>
+              <div class="d-flex justify-space-between gap-3 mb-2 flex-wrap">
+                <div>
+                  <div class="text-subtitle-1 font-weight-medium">
+                    {{ item.movimiento.concepto }}
+                  </div>
+                  <div class="text-body-2 text-disabled">
+                    {{ formatDate(item.movimiento.fechaMovimiento) }} · Mov. #{{ item.movimiento.id }}
+                  </div>
+                  <div v-if="facturasVinculadas(item.movimiento).length" class="d-flex flex-wrap align-center ga-2 mt-1">
+                    <span class="text-caption text-success">Vinculadas:</span>
+                    <VChip
+                      v-for="facturaVinculada in facturasVinculadas(item.movimiento)"
+                      :key="facturaVinculada.id ?? facturaVinculada.numeroFactura"
+                      size="small"
+                      color="success"
+                      variant="tonal"
+                    >
+                      <span>{{ facturaVinculada.numeroFactura || `#${facturaVinculada.id}` }}</span>
+                      <VBtn
+                        v-if="facturaVinculada.id != null"
+                        icon
+                        size="x-small"
+                        variant="text"
+                        color="success"
+                        :loading="guardando"
+                        class="ml-1"
+                        @click.stop="desconciliarUna(item.movimiento.id, facturaVinculada.id)"
+                      >
+                        <VIcon icon="tabler-x" size="14" />
+                      </VBtn>
+                    </VChip>
+                  </div>
+                </div>
+                <div class="text-right">
+                  <div class="text-subtitle-1">
+                    {{ formatMoney(item.movimiento.importe) }}
+                  </div>
+                  <VChip
+                    size="small"
+                    :color="facturasVinculadas(item.movimiento).length ? 'success' : item.candidatas.length ? 'warning' : 'secondary'"
+                    variant="tonal"
                   >
-                    <VIcon icon="tabler-x" size="14" />
-                  </VBtn>
-                </VChip>
+                    {{ facturasVinculadas(item.movimiento).length ? 'Conciliado' : item.candidatas.length ? `${item.candidatas.length} candidatas` : 'Sin candidatas' }}
+                  </VChip>
+                </div>
               </div>
-            </td>
-            <td class="text-right">{{ formatMoney(item.movimiento.importe) }}</td>
-            <td>
-              <div v-if="item.candidatas.length" class="d-flex flex-column gap-3 py-2">
-                <div
-                  v-for="(propuesta, idx) in item.candidatas"
-                  :key="propuesta.factura.id ?? `${item.movimiento.id}-${idx}`"
-                  class="border rounded pa-3"
-                >
-                  <div class="d-flex align-start justify-space-between ga-3">
-                    <div class="d-flex align-start ga-3 flex-grow-1">
+
+              <VTable v-if="item.candidatas.length" density="compact">
+                <thead>
+                  <tr>
+                    <th style="width: 40px;" />
+                    <th>Factura</th>
+                    <th>Proveedor</th>
+                    <th style="width: 110px;">
+                      Fecha
+                    </th>
+                    <th class="text-right" style="width: 120px;">
+                      Importe
+                    </th>
+                    <th>Score</th>
+                    <th style="width: 110px;" />
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="(propuesta, idx) in item.candidatas"
+                    :key="propuesta.factura.id ?? `${item.movimiento.id}-${idx}`"
+                  >
+                    <td>
                       <VCheckboxBtn
                         v-if="propuesta.factura.id != null"
                         :model-value="estaSeleccionada(item.movimiento.id, propuesta.factura.id)"
                         @update:model-value="toggleSeleccion(item.movimiento.id, propuesta.factura.id, Boolean($event))"
                       />
-                      <div class="flex-grow-1">
-                        <div class="d-flex flex-wrap align-center ga-2 mb-1">
-                          <span class="text-body-2 font-weight-medium">
-                            {{ propuesta.factura.numeroFactura || `Factura #${propuesta.factura.id}` }}
-                          </span>
-                          <VChip size="x-small" :color="colorConfianza(propuesta.confidence)" label>
+                    </td>
+                    <td>
+                      <div class="d-flex align-center ga-2">
+                        <span class="text-body-2 font-weight-medium">
+                          {{ propuesta.factura.numeroFactura || `#${propuesta.factura.id}` }}
+                        </span>
+                        <VChip v-if="idx === 0" size="x-small" color="primary" variant="tonal" label>
+                          mejor
+                        </VChip>
+                      </div>
+                    </td>
+                    <td class="text-body-2 text-disabled">
+                      {{ propuesta.factura.proveedorFacturaNombre || 'Sin proveedor' }}
+                    </td>
+                    <td>{{ formatDate(propuesta.factura.fechaFactura) }}</td>
+                    <td class="text-right">
+                      {{ formatMoney(propuesta.factura.importeTotal) }}
+                    </td>
+                    <td>
+                      <div class="d-flex flex-column ga-1 py-1">
+                        <div class="d-flex align-center ga-2">
+                          <VChip
+                            size="x-small"
+                            :color="colorConfianza(propuesta.confidence)"
+                            variant="tonal"
+                          >
                             {{ propuesta.confidence }}
                           </VChip>
-                          <VChip size="x-small" variant="tonal" label>
-                            score {{ propuesta.score }}
-                          </VChip>
-                          <VChip v-if="idx === 0" size="x-small" color="primary" variant="tonal" label>
-                            mejor sugerencia
-                          </VChip>
-                        </div>
-                        <div class="text-caption text-disabled mb-1">
-                          {{ propuesta.factura.proveedorFacturaNombre || 'Proveedor sin nombre' }} · {{ formatMoney(propuesta.factura.importeTotal) }} · {{ formatDate(propuesta.factura.fechaFactura) }}
+                          <span class="text-caption">score {{ propuesta.score }}</span>
                         </div>
                         <div class="d-flex flex-wrap ga-1">
                           <VChip
@@ -270,39 +309,29 @@ onMounted(cargar)
                           </VChip>
                         </div>
                       </div>
-                    </div>
-                    <VBtn
-                      size="small"
-                      variant="text"
-                      :loading="guardando"
-                      :disabled="propuesta.factura.id == null"
-                      @click="propuesta.factura.id != null && conciliarUna(item.movimiento.id, propuesta.factura.id)"
-                    >
-                      Conciliar
-                    </VBtn>
-                  </div>
-                </div>
-              </div>
+                    </td>
+                    <td class="text-right">
+                      <VBtn
+                        size="small"
+                        variant="text"
+                        color="primary"
+                        :loading="guardando"
+                        :disabled="propuesta.factura.id == null"
+                        @click="propuesta.factura.id != null && conciliarUna(item.movimiento.id, propuesta.factura.id)"
+                      >
+                        Conciliar
+                      </VBtn>
+                    </td>
+                  </tr>
+                </tbody>
+              </VTable>
               <div v-else class="text-caption text-disabled py-2">
                 {{ item.motivo || 'Sin candidatas.' }}
               </div>
-            </td>
-            <td>
-              <VBtn
-                v-if="item.candidatas.length"
-                size="small"
-                color="primary"
-                variant="tonal"
-                :loading="guardando"
-                @click="confirmarSeleccion"
-              >
-                Aplicar seleccion
-              </VBtn>
-              <span v-else class="text-caption text-disabled">{{ item.motivo || 'Revision manual' }}</span>
-            </td>
-          </tr>
-        </tbody>
-      </VTable>
+            </VCardText>
+          </VCard>
+        </VCol>
+      </VRow>
     </VCardText>
   </VCard>
 </template>
