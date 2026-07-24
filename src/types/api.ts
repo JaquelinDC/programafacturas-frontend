@@ -185,6 +185,7 @@ export interface FacturaConciliacionImporteDto {
   importeTotal?: number
   libreParaConciliacion: boolean
   movimientoConceptoOk: boolean
+  rutaPdf?: string
   movimientos: FacturaConciliacionImporteMovimientoDto[]
 }
 

@@ -27,6 +27,42 @@ const guardando = ref(false)
 const error = ref('')
 const mensaje = ref('')
 
+const pdfDialogOpen = ref(false)
+const pdfUrl = ref('')
+const pdfLoadingId = ref<number | null>(null)
+
+watch(pdfDialogOpen, open => {
+  if (!open && pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = ''
+  }
+})
+
+async function verPdf(factura: FacturaProveedorDto) {
+  if (!factura.rutaPdf || factura.id == null) return
+  pdfLoadingId.value = factura.id
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/facturas/${factura.id}/pdf`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+    if (!response.ok) {
+      error.value = 'No se pudo cargar el documento de la factura.'
+      return
+    }
+    const blob = await response.blob()
+    pdfUrl.value = URL.createObjectURL(blob)
+    pdfDialogOpen.value = true
+  }
+  catch {
+    error.value = 'No se pudo cargar el documento de la factura.'
+  }
+  finally {
+    pdfLoadingId.value = null
+  }
+}
+
 const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '-'
 const formatMoney = (n?: number) => n == null ? '-' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`
 
@@ -275,6 +311,14 @@ onMounted(cargar)
                         <VChip v-if="idx === 0" size="x-small" color="primary" variant="tonal" label>
                           mejor
                         </VChip>
+                        <IconBtn
+                          v-if="propuesta.factura.rutaPdf"
+                          size="small"
+                          :loading="pdfLoadingId === propuesta.factura.id"
+                          @click="verPdf(propuesta.factura)"
+                        >
+                          <VIcon icon="tabler-file-type-pdf" color="error" size="18" />
+                        </IconBtn>
                       </div>
                     </td>
                     <td class="text-body-2 text-disabled">
@@ -334,4 +378,20 @@ onMounted(cargar)
       </VRow>
     </VCardText>
   </VCard>
+
+  <VDialog v-model="pdfDialogOpen" max-width="960" max-height="90vh" scrollable>
+    <VCard>
+      <VCardTitle class="d-flex align-center pa-3">
+        <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+        Documento
+        <VSpacer />
+        <IconBtn @click="pdfDialogOpen = false">
+          <VIcon icon="tabler-x" />
+        </IconBtn>
+      </VCardTitle>
+      <VCardText class="pa-0" style="height: 80vh;">
+        <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
+      </VCardText>
+    </VCard>
+  </VDialog>
 </template>

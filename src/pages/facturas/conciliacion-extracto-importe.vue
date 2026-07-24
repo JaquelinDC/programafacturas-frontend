@@ -21,6 +21,42 @@ function showMsg(msg: string, color: 'success' | 'error' = 'success') {
   snackbar.value = true
 }
 
+const pdfDialogOpen = ref(false)
+const pdfUrl = ref('')
+const pdfLoadingId = ref<number | null>(null)
+
+watch(pdfDialogOpen, open => {
+  if (!open && pdfUrl.value) {
+    URL.revokeObjectURL(pdfUrl.value)
+    pdfUrl.value = ''
+  }
+})
+
+async function verPdf(facturaId: number) {
+  pdfLoadingId.value = facturaId
+  try {
+    const accessToken = useCookie('accessToken').value
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+    const response = await fetch(`${baseUrl}/facturas/${facturaId}/pdf`, {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    })
+
+    if (!response.ok) {
+      showMsg('No se pudo cargar el documento de la factura', 'error')
+      return
+    }
+    const blob = await response.blob()
+    pdfUrl.value = URL.createObjectURL(blob)
+    pdfDialogOpen.value = true
+  }
+  catch {
+    showMsg('No se pudo cargar el documento de la factura', 'error')
+  }
+  finally {
+    pdfLoadingId.value = null
+  }
+}
+
 async function cargar() {
   loading.value = true
   try {
@@ -120,8 +156,18 @@ onMounted(cargar)
         <VCardText>
           <div class="d-flex justify-space-between gap-3 mb-2">
             <div>
-              <div class="text-subtitle-1 font-weight-medium">
-                {{ item.facturaNumero || `Factura #${item.facturaId}` }}
+              <div class="d-flex align-center ga-1">
+                <span class="text-subtitle-1 font-weight-medium">
+                  {{ item.facturaNumero || `Factura #${item.facturaId}` }}
+                </span>
+                <IconBtn
+                  v-if="item.rutaPdf"
+                  size="small"
+                  :loading="pdfLoadingId === item.facturaId"
+                  @click="verPdf(item.facturaId)"
+                >
+                  <VIcon icon="tabler-file-type-pdf" color="error" size="20" />
+                </IconBtn>
               </div>
               <div class="text-body-2 text-disabled">
                 {{ item.proveedorNombre || 'Sin proveedor' }} · {{ formatDate(item.facturaFecha) }}
@@ -270,4 +316,25 @@ onMounted(cargar)
   >
     {{ snackbarMsg }}
   </VSnackbar>
+
+  <VDialog
+    v-model="pdfDialogOpen"
+    max-width="960"
+    max-height="90vh"
+    scrollable
+  >
+    <VCard>
+      <VCardTitle class="d-flex align-center pa-3">
+        <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+        Documento
+        <VSpacer />
+        <IconBtn @click="pdfDialogOpen = false">
+          <VIcon icon="tabler-x" />
+        </IconBtn>
+      </VCardTitle>
+      <VCardText class="pa-0" style="height: 80vh;">
+        <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
+      </VCardText>
+    </VCard>
+  </VDialog>
 </template>
