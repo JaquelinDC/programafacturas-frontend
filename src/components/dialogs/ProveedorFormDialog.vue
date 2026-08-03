@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $api } from '@/utils/api'
-import type { ProveedorFacturaDto } from '@/types/api'
+import type { ConceptoMovimientoConciliacionDto, ProveedorFacturaDto } from '@/types/api'
 
 interface Props {
   modelValue: boolean
@@ -29,7 +29,6 @@ const emptyForm = () => ({
   codigoPostal: '',
   localidad: '',
   codigoContable: '',
-  aliasesConciliacion: '',
 })
 
 const form = ref(emptyForm())
@@ -44,10 +43,60 @@ watch(() => props.modelValue, open => {
       codigoPostal: props.proveedor?.codigoPostal ?? '',
       localidad: props.proveedor?.localidad ?? '',
       codigoContable: props.proveedor?.codigoContable ?? '',
-      aliasesConciliacion: props.proveedor?.aliasesConciliacion ?? '',
     }
+    conceptos.value = []
+    nuevoConcepto.value = ''
+    if (props.proveedor?.id)
+      cargarConceptos(props.proveedor.id)
   }
 })
+
+const conceptos = ref<ConceptoMovimientoConciliacionDto[]>([])
+const nuevoConcepto = ref('')
+const gestionandoConcepto = ref(false)
+
+async function cargarConceptos(proveedorId: number) {
+  try {
+    conceptos.value = await $api<ConceptoMovimientoConciliacionDto[]>(`/proveedores-factura/${proveedorId}/conceptos-conciliacion`)
+  }
+  catch {
+    conceptos.value = []
+  }
+}
+
+async function anadirConcepto() {
+  if (!props.proveedor?.id || !nuevoConcepto.value.trim()) return
+  gestionandoConcepto.value = true
+  errorMsg.value = null
+  try {
+    const concepto = await $api<ConceptoMovimientoConciliacionDto>(`/proveedores-factura/${props.proveedor.id}/conceptos-conciliacion`, {
+      method: 'POST', body: { texto: nuevoConcepto.value },
+    })
+    if (!conceptos.value.some(item => item.id === concepto.id)) conceptos.value.push(concepto)
+    nuevoConcepto.value = ''
+  }
+  catch (e: any) {
+    errorMsg.value = e?.data?.message || 'No se pudo añadir el concepto'
+  }
+  finally {
+    gestionandoConcepto.value = false
+  }
+}
+
+async function eliminarConcepto(conceptoId: number) {
+  if (!props.proveedor?.id) return
+  gestionandoConcepto.value = true
+  try {
+    await $api(`/proveedores-factura/${props.proveedor.id}/conceptos-conciliacion/${conceptoId}`, { method: 'DELETE' })
+    conceptos.value = conceptos.value.filter(item => item.id !== conceptoId)
+  }
+  catch (e: any) {
+    errorMsg.value = e?.data?.message || 'No se pudo eliminar el concepto'
+  }
+  finally {
+    gestionandoConcepto.value = false
+  }
+}
 
 async function save() {
   if (!form.value.nombre.trim()) {
@@ -110,13 +159,18 @@ async function save() {
             <VCol cols="12" sm="8">
               <AppTextField v-model="form.localidad" label="Localidad" />
             </VCol>
-            <VCol cols="12">
-              <AppTextarea
-                v-model="form.aliasesConciliacion"
-                label="Aliases conciliacion"
-                rows="3"
-                placeholder="Una variante por linea o separadas por coma"
-              />
+            <VCol v-if="proveedor" cols="12">
+              <div class="text-subtitle-2 mb-2">Conceptos aprendidos de movimientos</div>
+              <div class="d-flex gap-2 mb-2">
+                <AppTextField v-model="nuevoConcepto" label="Concepto u observación" hide-details @keyup.enter="anadirConcepto" />
+                <VBtn :loading="gestionandoConcepto" @click="anadirConcepto">Añadir</VBtn>
+              </div>
+              <div v-if="conceptos.length" class="d-flex flex-wrap gap-2">
+                <VChip v-for="concepto in conceptos" :key="concepto.id" closable @click:close="eliminarConcepto(concepto.id)">
+                  {{ concepto.texto }}
+                </VChip>
+              </div>
+              <div v-else class="text-disabled text-body-2">Todavía no hay conceptos asociados.</div>
             </VCol>
           </VRow>
         </VForm>

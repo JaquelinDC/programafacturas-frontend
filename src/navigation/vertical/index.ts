@@ -20,6 +20,11 @@ export default [
     to: { name: 'facturas-emitidas' },
     icon: { icon: 'tabler-file-text' },
   },
+  {
+    title: 'Conciliar',
+    to: { name: 'conciliar' },
+    icon: { icon: 'tabler-arrows-exchange' },
+  },
   { heading: 'Conciliación bancaria' },
   {
     title: 'Pagos',

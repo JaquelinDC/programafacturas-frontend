@@ -210,10 +210,6 @@ function fillForm(f: FacturaProveedorDto) {
     tipoPagoId: f.tipoPagoId ?? null,
     codigoCuentaGastoId: f.codigoCuentaGastoId ?? null,
   }
-  // Si tenemos bases imponibles calculadas, sincronizar importeTotal con totalCalculado
-  // para que el IRPF (y cualquier descuadre de la IA) quede correctamente aplicado
-  if (ivaBase0 > 0 || ivaBase4 > 0 || ivaBase10 > 0 || ivaBase21 > 0)
-    form.value.importeTotal = totalCalculado.value
   nuevoEstado.value = f.estado ?? ''
 }
 

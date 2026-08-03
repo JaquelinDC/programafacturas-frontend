@@ -35,6 +35,83 @@ export interface PageResponse<T> {
   last: boolean
 }
 
+export type TipoFacturaConciliacion = 'PROVEEDOR' | 'EMITIDA'
+
+export interface ConciliacionResumenDto {
+  facturasProveedorPendientes: number
+  facturasEmitidasPendientes: number
+  movimientosPendientes: number
+}
+
+export interface ConciliacionFacturaDto {
+  tipo: TipoFacturaConciliacion
+  id: number
+  numero?: string
+  tercero?: string
+  fecha?: string
+  importe?: number
+  estado?: string
+  conciliada: boolean
+  movimientoIds: number[]
+}
+
+export interface ConciliacionFacturaRefDto {
+  tipo: TipoFacturaConciliacion
+  id: number
+  numero?: string
+}
+
+export interface ConciliacionMovimientoDto {
+  id: number
+  extractoId?: number
+  banco?: string
+  fecha?: string
+  concepto?: string
+  observaciones?: string
+  importe?: number
+  estado: 'PENDIENTE' | 'CONCILIADO' | 'PAGO' | 'EXCLUIDO' | 'NO_CONCILIABLE'
+  facturas: ConciliacionFacturaRefDto[]
+}
+
+export interface ConciliacionCoincidenciaDto {
+  diferenciaImporte?: number
+  diferenciaDias?: number
+  coincideImporte: boolean
+  coincideFecha: boolean
+  coincideTexto: boolean
+  requiereConfirmacion: boolean
+  avisos: string[]
+}
+
+export interface ConciliacionCandidatoMovimientoDto {
+  movimiento: ConciliacionMovimientoDto
+  coincidencia: ConciliacionCoincidenciaDto
+}
+
+export interface ConciliacionCandidatoFacturaDto {
+  factura: ConciliacionFacturaDto
+  coincidencia: ConciliacionCoincidenciaDto
+}
+
+export interface ConciliacionEnlaceRequest {
+  tipoFactura: TipoFacturaConciliacion
+  facturaIds: number[]
+  movimientoIds: number[]
+  confirmarManual: boolean
+}
+
+export interface ConciliacionDesenlaceRequest {
+  tipoFactura: TipoFacturaConciliacion
+  facturaId: number
+  movimientoId: number
+}
+
+export interface ConciliacionResultadoDto {
+  ok: boolean
+  enlacesAfectados: number
+  mensaje: string
+}
+
 // ─── Maestros ────────────────────────────────────────────────────────────────
 
 export interface ProveedorDto {
@@ -52,7 +129,12 @@ export interface ProveedorFacturaDto {
   codigoPostal?: string
   localidad?: string
   codigoContable?: string
-  aliasesConciliacion?: string
+}
+
+export interface ConceptoMovimientoConciliacionDto {
+  id: number
+  texto: string
+  textoNormalizado: string
 }
 
 export interface ClienteDto {
@@ -305,6 +387,7 @@ export interface FacturaFiltrosRequest {
   fechaDesde?: string
   fechaHasta?: string
   preset?: string
+  trimestre?: number
   fechaCreacionDesde?: string
   fechaCreacionHasta?: string
   presetCreacion?: string

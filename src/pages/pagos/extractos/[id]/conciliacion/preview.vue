@@ -26,6 +26,10 @@ const cargando = ref(false)
 const guardando = ref(false)
 const error = ref('')
 const mensaje = ref('')
+const automatico = ref(true)
+const usarFecha = ref(true)
+const usarImporte = ref(true)
+const usarConceptos = ref(true)
 
 const pdfDialogOpen = ref(false)
 const pdfUrl = ref('')
@@ -39,7 +43,7 @@ watch(pdfDialogOpen, open => {
 })
 
 async function verPdf(factura: FacturaProveedorDto) {
-  if (!factura.rutaPdf || factura.id == null) return
+  if (factura.id == null) return
   pdfLoadingId.value = factura.id
   try {
     const accessToken = useCookie('accessToken').value
@@ -96,6 +100,15 @@ function colorConfianza(confidence?: string) {
   return 'secondary'
 }
 
+function criteriosQuery() {
+  return new URLSearchParams({
+    automatico: String(automatico.value),
+    usarFecha: String(usarFecha.value),
+    usarImporte: String(usarImporte.value),
+    usarConceptos: String(usarConceptos.value),
+  }).toString()
+}
+
 function facturasVinculadas(mov: ExtractoBancarioMovimientoDto): FacturaProveedorResumenDto[] {
   if (mov.facturasProveedor?.length) return mov.facturasProveedor
   if (mov.facturaProveedorId != null || mov.facturaProveedorNumero) {
@@ -105,17 +118,30 @@ function facturasVinculadas(mov: ExtractoBancarioMovimientoDto): FacturaProveedo
 }
 
 async function cargar() {
+  if (!automatico.value && !usarFecha.value && !usarImporte.value && !usarConceptos.value) {
+    error.value = 'Selecciona al menos un criterio de conciliación.'
+    return
+  }
   cargando.value = true
   error.value = ''
   mensaje.value = ''
   try {
     const [extractoResp, itemsResp] = await Promise.all([
       $api<ExtractoBancarioDto>(`/extractos/${id.value}`),
-      $api<ConciliacionProveedorPreviewItem[]>(`/extractos/${id.value}/conciliacion/preview`),
+      $api<ConciliacionProveedorPreviewItem[]>(`/extractos/${id.value}/conciliacion/preview?${criteriosQuery()}`),
     ])
     extracto.value = extractoResp
-    items.value = itemsResp
-    seleccionarMejorPropuesta(itemsResp)
+    const itemsOrdenados = itemsResp
+      .map((item, ordenOriginal) => ({ item, ordenOriginal }))
+      .sort((a, b) => {
+        const aMultiple = a.item.candidatas.length > 1 ? 1 : 0
+        const bMultiple = b.item.candidatas.length > 1 ? 1 : 0
+
+        return bMultiple - aMultiple || a.ordenOriginal - b.ordenOriginal
+      })
+      .map(({ item }) => item)
+    items.value = itemsOrdenados
+    seleccionarMejorPropuesta(itemsOrdenados)
   }
   catch (err: any) {
     error.value = err?.data?.message || err?.message || 'No se pudo cargar la conciliacion.'
@@ -125,8 +151,8 @@ async function cargar() {
   }
 }
 
-async function confirmarSeleccion() {
-  if (!seleccionadas.value.length) {
+async function confirmarSeleccion(relaciones = seleccionadas.value) {
+  if (!relaciones.length) {
     error.value = 'Selecciona al menos una relacion movimiento-factura.'
     return
   }
@@ -134,9 +160,9 @@ async function confirmarSeleccion() {
   error.value = ''
   mensaje.value = ''
   try {
-    const res = await $api<{ mensaje?: string }>(`/extractos/${id.value}/conciliar`, {
+    const res = await $api<{ mensaje?: string }>(`/extractos/${id.value}/conciliar?${criteriosQuery()}`, {
       method: 'POST',
-      body: seleccionadas.value,
+      body: relaciones,
     })
     mensaje.value = res?.mensaje || 'Conciliacion aplicada.'
     await cargar()
@@ -149,23 +175,12 @@ async function confirmarSeleccion() {
   }
 }
 
-async function conciliarUna(movimientoId: number, facturaId: number) {
-  guardando.value = true
-  error.value = ''
-  mensaje.value = ''
-  try {
-    const res = await $api<{ mensaje?: string }>(`/extractos/${id.value}/conciliar/${facturaId}?movimientoId=${movimientoId}`, {
-      method: 'POST',
-    })
-    mensaje.value = res?.mensaje || 'Conciliacion aplicada.'
-    await cargar()
-  }
-  catch (err: any) {
-    error.value = err?.data?.message || err?.message || 'No se pudo conciliar la factura.'
-  }
-  finally {
-    guardando.value = false
-  }
+function seleccionesMovimiento(movimientoId: number) {
+  return seleccionadas.value.filter(seleccion => seleccion.startsWith(`${movimientoId}:`))
+}
+
+async function conciliarMovimiento(movimientoId: number) {
+  await confirmarSeleccion(seleccionesMovimiento(movimientoId))
 }
 
 async function desconciliarUna(movimientoId: number, facturaId: number) {
@@ -198,14 +213,37 @@ onMounted(cargar)
       <template #append>
         <div class="d-flex gap-2">
           <VBtn :to="`/extractos/${id}`" variant="tonal">Volver al extracto</VBtn>
-          <VBtn color="primary" :loading="guardando" :disabled="cargando || !seleccionadas.length" @click="confirmarSeleccion">
-            Confirmar seleccion
+          <VBtn color="primary" :loading="guardando" :disabled="cargando || !seleccionadas.length" @click="confirmarSeleccion()">
+            Conciliar todos los seleccionados ({{ seleccionadas.length }})
           </VBtn>
         </div>
       </template>
     </VCardItem>
 
     <VCardText>
+      <VCard variant="tonal" class="mb-4">
+        <VCardText>
+          <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
+            <div>
+              <div class="text-subtitle-1">Criterios de búsqueda</div>
+              <div class="text-body-2 text-disabled">
+                Automático: concepto aprendido + importe con diferencia máxima del 1%; la fecha ordena las propuestas.
+              </div>
+            </div>
+            <VBtnToggle v-model="automatico" mandatory color="primary" density="compact">
+              <VBtn :value="true">Automático</VBtn>
+              <VBtn :value="false">Personalizado</VBtn>
+            </VBtnToggle>
+          </div>
+          <div class="d-flex flex-wrap align-center gap-4">
+            <VSwitch v-model="usarFecha" label="Mismo día" :disabled="automatico" hide-details density="compact" />
+            <VSwitch v-model="usarImporte" label="Importe (tolerancia 1%)" :disabled="automatico" hide-details density="compact" />
+            <VSwitch v-model="usarConceptos" label="Conceptos aprendidos" :disabled="automatico" hide-details density="compact" />
+            <VBtn variant="tonal" :loading="cargando" @click="cargar">Aplicar criterios</VBtn>
+          </div>
+        </VCardText>
+      </VCard>
+
       <VAlert v-if="error" type="error" variant="tonal" class="mb-4">
         {{ error }}
       </VAlert>
@@ -288,7 +326,6 @@ onMounted(cargar)
                       Importe
                     </th>
                     <th>Score</th>
-                    <th style="width: 110px;" />
                   </tr>
                 </thead>
                 <tbody>
@@ -312,8 +349,9 @@ onMounted(cargar)
                           mejor
                         </VChip>
                         <IconBtn
-                          v-if="propuesta.factura.rutaPdf"
                           size="small"
+                          title="Ver documento original"
+                          aria-label="Ver documento original"
                           :loading="pdfLoadingId === propuesta.factura.id"
                           @click="verPdf(propuesta.factura)"
                         >
@@ -354,23 +392,23 @@ onMounted(cargar)
                         </div>
                       </div>
                     </td>
-                    <td class="text-right">
-                      <VBtn
-                        size="small"
-                        variant="text"
-                        color="primary"
-                        :loading="guardando"
-                        :disabled="propuesta.factura.id == null"
-                        @click="propuesta.factura.id != null && conciliarUna(item.movimiento.id, propuesta.factura.id)"
-                      >
-                        Conciliar
-                      </VBtn>
-                    </td>
                   </tr>
                 </tbody>
               </VTable>
               <div v-else class="text-caption text-disabled py-2">
                 {{ item.motivo || 'Sin candidatas.' }}
+              </div>
+              <div v-if="item.candidatas.length" class="d-flex justify-end mt-3">
+                <VBtn
+                  size="small"
+                  variant="text"
+                  color="primary"
+                  :loading="guardando"
+                  :disabled="!seleccionesMovimiento(item.movimiento.id).length"
+                  @click="conciliarMovimiento(item.movimiento.id)"
+                >
+                  Conciliar movimiento
+                </VBtn>
               </div>
             </VCardText>
           </VCard>

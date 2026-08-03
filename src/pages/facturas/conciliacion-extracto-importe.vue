@@ -2,14 +2,19 @@
 import type { FacturaConciliacionImporteDto } from '@/types/api'
 import { $api } from '@/utils/api'
 
-definePage({ meta: { title: 'Conciliacion por importe' } })
+definePage({ meta: { title: 'Conciliación de facturas y movimientos' } })
 
 const loading = ref(false)
 const items = ref<FacturaConciliacionImporteDto[]>([])
-const selectedFacturaId = ref<number | null>(null)
-const selectedMovimientoId = ref<number | null>(null)
+const selectedMovimientosPorFactura = ref<Record<number, number[]>>({})
+const facturaIdsAConciliar = ref<number[]>([])
 const confirmDialog = ref(false)
 const actionLoading = ref(false)
+const soloConflictos = ref(false)
+const automatico = ref(true)
+const usarFecha = ref(true)
+const usarImporte = ref(true)
+const usarConceptos = ref(true)
 
 const snackbar = ref(false)
 const snackbarMsg = ref('')
@@ -58,9 +63,27 @@ async function verPdf(facturaId: number) {
 }
 
 async function cargar() {
+  if (!automatico.value && !usarFecha.value && !usarImporte.value && !usarConceptos.value) {
+    showMsg('Selecciona al menos un criterio de conciliación', 'error')
+    return
+  }
   loading.value = true
   try {
-    items.value = await $api<FacturaConciliacionImporteDto[]>('/facturas/conciliacion-extracto-por-importe')
+    const resultado = await $api<FacturaConciliacionImporteDto[]>(`/facturas/conciliacion-extracto-por-importe?${criteriosQuery()}`)
+    items.value = resultado
+      .map((item, ordenOriginal) => ({ item, ordenOriginal }))
+      .sort((a, b) => {
+        const aMultiple = a.item.movimientos.length > 1 ? 1 : 0
+        const bMultiple = b.item.movimientos.length > 1 ? 1 : 0
+
+        return bMultiple - aMultiple || a.ordenOriginal - b.ordenOriginal
+      })
+      .map(({ item }) => item)
+    selectedMovimientosPorFactura.value = Object.fromEntries(
+      items.value
+        .filter(item => item.movimientos[0]?.movimientoId != null)
+        .map(item => [item.facturaId, [item.movimientos[0].movimientoId]]),
+    )
   }
   catch {
     showMsg('No se pudo cargar la conciliacion por importe', 'error')
@@ -70,42 +93,122 @@ async function cargar() {
   }
 }
 
-const selectedFactura = computed(() => items.value.find(f => f.facturaId === selectedFacturaId.value) ?? null)
+function criteriosQuery() {
+  return new URLSearchParams({
+    automatico: String(automatico.value),
+    usarFecha: String(usarFecha.value),
+    usarImporte: String(usarImporte.value),
+    usarConceptos: String(usarConceptos.value),
+  }).toString()
+}
+
+const facturaIdsSeleccionadas = computed(() => Object.entries(selectedMovimientosPorFactura.value)
+  .filter(([, movimientoIds]) => movimientoIds.length)
+  .map(([facturaId]) => Number(facturaId)))
+const movimientosSeleccionadosCount = computed(() => Object.values(selectedMovimientosPorFactura.value)
+  .reduce((total, movimientoIds) => total + movimientoIds.length, 0))
+const selectedFacturaIds = computed(() => facturaIdsAConciliar.value)
+const selectedMovimientoIds = computed(() => facturaIdsAConciliar.value
+  .flatMap(facturaId => selectedMovimientosPorFactura.value[facturaId] ?? []))
+const vinculosAConciliarCount = computed(() => selectedMovimientoIds.value.length)
+const facturasSeleccionadasPorMovimiento = computed(() => {
+  const selecciones = new Map<number, Set<number>>()
+  for (const [facturaIdRaw, movimientoIds] of Object.entries(selectedMovimientosPorFactura.value)) {
+    const facturaId = Number(facturaIdRaw)
+    for (const movimientoId of movimientoIds) {
+      const facturaIds = selecciones.get(movimientoId) ?? new Set<number>()
+      facturaIds.add(facturaId)
+      selecciones.set(movimientoId, facturaIds)
+    }
+  }
+  return selecciones
+})
+const movimientosRepetidosEnSeleccionActual = computed(() =>
+  [...facturasSeleccionadasPorMovimiento.value.values()].filter(facturaIds => facturaIds.size > 1).length,
+)
+const itemsVisibles = computed(() => {
+  if (!soloConflictos.value)
+    return items.value
+
+  return items.value
+    .map(item => ({
+      ...item,
+      movimientos: item.movimientos.filter(movimiento =>
+        movimientoSeleccionadoEnVariasFacturas(movimiento.movimientoId)),
+    }))
+    .filter(item => item.movimientos.length)
+})
+const movimientosRepetidosSeleccionados = computed(() => {
+  const selecciones = new Map<number, Set<number>>()
+  for (const facturaId of facturaIdsAConciliar.value) {
+    for (const movimientoId of selectedMovimientosPorFactura.value[facturaId] ?? []) {
+      const facturaIds = selecciones.get(movimientoId) ?? new Set<number>()
+      facturaIds.add(facturaId)
+      selecciones.set(movimientoId, facturaIds)
+    }
+  }
+  return [...selecciones.entries()]
+    .filter(([, facturaIds]) => facturaIds.size > 1)
+    .map(([movimientoId, facturaIds]) => ({ movimientoId, facturas: facturaIds.size }))
+})
+
+function movimientosSeleccionados(facturaId: number) {
+  return new Set(selectedMovimientosPorFactura.value[facturaId] ?? [])
+}
+
+function movimientoSeleccionadoEnVariasFacturas(movimientoId: number) {
+  return (facturasSeleccionadasPorMovimiento.value.get(movimientoId)?.size ?? 0) > 1
+}
+
+function toggleMovimiento(facturaId: number, movimientoId: number, checked: boolean) {
+  const next = new Set(selectedMovimientosPorFactura.value[facturaId] ?? [])
+  checked ? next.add(movimientoId) : next.delete(movimientoId)
+  selectedMovimientosPorFactura.value = { ...selectedMovimientosPorFactura.value, [facturaId]: [...next] }
+}
+
+function limpiarSeleccion() {
+  selectedMovimientosPorFactura.value = {}
+  facturaIdsAConciliar.value = []
+}
+
+function abrirConciliacionFactura(facturaId: number) {
+  if (!movimientosSeleccionados(facturaId).size)
+    return
+  facturaIdsAConciliar.value = [facturaId]
+  confirmDialog.value = true
+}
+
+function abrirConciliacionSeleccionadas() {
+  if (!facturaIdsSeleccionadas.value.length)
+    return
+  facturaIdsAConciliar.value = facturaIdsSeleccionadas.value
+  confirmDialog.value = true
+}
 
 async function conciliar() {
-  if (!selectedFacturaId.value || !selectedMovimientoId.value)
+  if (!facturaIdsAConciliar.value.length)
     return
   actionLoading.value = true
   try {
-    const res = await $api<{ ok: boolean; mensaje: string }>('/facturas/conciliacion-extracto-por-importe/conciliar', {
-      method: 'POST',
-      body: { facturaId: selectedFacturaId.value, movimientoId: selectedMovimientoId.value },
-    })
+    let mensaje = 'Conciliación completada'
+    for (const facturaId of facturaIdsAConciliar.value) {
+      const movimientoIds = selectedMovimientosPorFactura.value[facturaId] ?? []
+      if (!movimientoIds.length)
+        continue
+      const res = await $api<{ ok: boolean; mensaje: string }>(`/facturas/conciliacion-extracto-por-importe/conciliar-seleccion?${criteriosQuery()}`, {
+        method: 'POST',
+        body: { facturaIds: [facturaId], movimientoIds },
+      })
+      mensaje = res.mensaje
+    }
 
-    showMsg(res.mensaje)
-    selectedMovimientoId.value = null
-    selectedFacturaId.value = null
+    showMsg(mensaje)
+    limpiarSeleccion()
     confirmDialog.value = false
     await cargar()
   }
   catch (e: any) {
     showMsg(e?.data?.message || 'No se pudo conciliar', 'error')
-  }
-  finally {
-    actionLoading.value = false
-  }
-}
-
-async function desconciliar(facturaId: number) {
-  actionLoading.value = true
-  try {
-    const res = await $api<{ ok: boolean; mensaje: string }>(`/facturas/${facturaId}/desconciliar-extracto`, { method: 'POST' })
-
-    showMsg(res.mensaje)
-    await cargar()
-  }
-  catch (e: any) {
-    showMsg(e?.data?.message || 'No se pudo desconciliar', 'error')
   }
   finally {
     actionLoading.value = false
@@ -124,10 +227,10 @@ onMounted(cargar)
     <VCardText class="d-flex align-center justify-space-between flex-wrap gap-3">
       <div>
         <div class="text-h6">
-          Conciliacion de facturas con movimientos
+          Conciliación de facturas con movimientos
         </div>
         <div class="text-body-2 text-disabled">
-          Seleccion por importe con ranking, score y apoyo de observaciones.
+          Busca movimientos desde las facturas usando modo automático o criterios personalizados.
         </div>
       </div>
       <VBtn
@@ -140,19 +243,63 @@ onMounted(cargar)
     </VCardText>
   </VCard>
 
+  <VCard variant="tonal" class="mb-4">
+    <VCardText>
+      <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
+        <div>
+          <div class="text-subtitle-1">Criterios de búsqueda</div>
+          <div class="text-body-2 text-disabled">
+            Automático: concepto aprendido + importe con diferencia máxima del 1%; la fecha ordena los movimientos.
+          </div>
+        </div>
+        <VBtnToggle v-model="automatico" mandatory color="primary" density="compact">
+          <VBtn :value="true">Automático</VBtn>
+          <VBtn :value="false">Personalizado</VBtn>
+        </VBtnToggle>
+      </div>
+      <div class="d-flex flex-wrap align-center gap-4">
+        <VSwitch v-model="usarFecha" label="Mismo día" :disabled="automatico" hide-details density="compact" />
+        <VSwitch v-model="usarImporte" label="Importe (tolerancia 1%)" :disabled="automatico" hide-details density="compact" />
+        <VSwitch v-model="usarConceptos" label="Conceptos aprendidos" :disabled="automatico" hide-details density="compact" />
+        <VBtn variant="tonal" :loading="loading" @click="cargar">Aplicar criterios</VBtn>
+        <VBtn
+          :color="soloConflictos ? 'warning' : undefined"
+          :variant="soloConflictos ? 'flat' : 'tonal'"
+          :disabled="!movimientosRepetidosEnSeleccionActual && !soloConflictos"
+          @click="soloConflictos = !soloConflictos"
+        >
+          {{ soloConflictos ? 'Ver todos' : `Ver solo conflictos (${movimientosRepetidosEnSeleccionActual})` }}
+        </VBtn>
+        <VBtn color="primary" :disabled="!facturaIdsSeleccionadas.length" @click="abrirConciliacionSeleccionadas">
+          Conciliar todos los seleccionados ({{ movimientosSeleccionadosCount }})
+        </VBtn>
+      </div>
+    </VCardText>
+  </VCard>
+
   <VProgressLinear
     v-if="loading"
     indeterminate
     class="mb-4"
   />
 
+  <VAlert
+    v-if="!loading && movimientosRepetidosEnSeleccionActual"
+    type="warning"
+    variant="tonal"
+    class="mb-4"
+  >
+    Has seleccionado {{ movimientosRepetidosEnSeleccionActual }} movimiento(s) en más de una factura.
+    Se crearán todos los vínculos N:N seleccionados.
+  </VAlert>
+
   <VRow>
     <VCol
-      v-for="item in items"
+      v-for="item in itemsVisibles"
       :key="item.facturaId"
       cols="12"
     >
-      <VCard :variant="selectedFacturaId === item.facturaId ? 'elevated' : 'outlined'">
+      <VCard variant="outlined">
         <VCardText>
           <div class="d-flex justify-space-between gap-3 mb-2">
             <div>
@@ -161,8 +308,9 @@ onMounted(cargar)
                   {{ item.facturaNumero || `Factura #${item.facturaId}` }}
                 </span>
                 <IconBtn
-                  v-if="item.rutaPdf"
                   size="small"
+                  title="Ver documento original"
+                  aria-label="Ver documento original"
                   :loading="pdfLoadingId === item.facturaId"
                   @click="verPdf(item.facturaId)"
                 >
@@ -206,6 +354,9 @@ onMounted(cargar)
               <tr
                 v-for="mov in item.movimientos"
                 :key="mov.movimientoId"
+                :style="movimientoSeleccionadoEnVariasFacturas(mov.movimientoId)
+                  ? { backgroundColor: 'rgba(var(--v-theme-warning), 0.12)' }
+                  : undefined"
               >
                 <td>{{ mov.movimientoId }}</td>
                 <td>{{ mov.extractoEtiqueta }}</td>
@@ -253,14 +404,11 @@ onMounted(cargar)
                   </div>
                 </td>
                 <td class="text-right">
-                  <VBtn
-                    size="small"
-                    variant="tonal"
-                    color="primary"
-                    @click="selectedFacturaId = item.facturaId; selectedMovimientoId = mov.movimientoId; confirmDialog = true"
-                  >
-                    Seleccionar
-                  </VBtn>
+                  <VCheckboxBtn
+                    :model-value="movimientosSeleccionados(item.facturaId).has(mov.movimientoId)"
+                    :aria-label="`Seleccionar movimiento ${mov.movimientoId}`"
+                    @update:model-value="(v: boolean) => toggleMovimiento(item.facturaId, mov.movimientoId, v)"
+                  />
                 </td>
               </tr>
             </tbody>
@@ -270,11 +418,11 @@ onMounted(cargar)
             <VBtn
               size="small"
               variant="text"
-              color="error"
-              :loading="actionLoading"
-              @click="desconciliar(item.facturaId)"
+              color="primary"
+              :disabled="!movimientosSeleccionados(item.facturaId).size"
+              @click="abrirConciliacionFactura(item.facturaId)"
             >
-              Desconciliar
+              Conciliar factura
             </VBtn>
           </div>
         </VCardText>
@@ -286,16 +434,26 @@ onMounted(cargar)
     v-model="confirmDialog"
     max-width="520"
   >
-    <VCard v-if="selectedFactura">
+    <VCard v-if="facturaIdsAConciliar.length">
       <VCardTitle>Confirmar conciliacion</VCardTitle>
       <VCardText>
-        Factura {{ selectedFactura.facturaNumero || selectedFactura.facturaId }} con movimiento {{ selectedMovimientoId }}.
+        Se conciliarán {{ selectedFacturaIds.length }} factura(s) con {{ selectedMovimientoIds.length }} movimiento(s), creando {{ vinculosAConciliarCount }} vínculo(s).
+        <VAlert
+          v-if="movimientosRepetidosSeleccionados.length"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+        >
+          {{ movimientosRepetidosSeleccionados.length }} movimiento(s) están seleccionados para más de una factura.
+          Se crearán todos los vínculos N:N seleccionados.
+        </VAlert>
       </VCardText>
       <VCardActions>
         <VSpacer />
         <VBtn
           variant="text"
-          @click="selectedFacturaId = null; selectedMovimientoId = null; confirmDialog = false"
+          @click="confirmDialog = false"
         >
           Cancelar
         </VBtn>

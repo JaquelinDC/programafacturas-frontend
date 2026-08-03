@@ -30,6 +30,7 @@ const itemsPerPageOptions = [
   { title: 'Todos', value: -1 },
 ]
 const selectedFacturaIds = ref<number[]>([])
+const conciliacionDialog = ref<{ abrir: (factura: FacturaProveedorDto) => Promise<void> }>()
 
 // ─── Caché de páginas ─────────────────────────────────────────────────────────
 const CACHE_TTL_MS = 2 * 60 * 1000
@@ -45,8 +46,19 @@ function limpiarCache() {
   pageCache.clear()
 }
 
+function abrirConciliacion(factura: FacturaProveedorDto) {
+  conciliacionDialog.value?.abrir(factura)
+}
+
+async function conciliacionActualizada() {
+  limpiarCache()
+  showMsg('Conciliación completada')
+  await buscar()
+}
+
 // ─── Filtros ──────────────────────────────────────────────────────────────────
-const filtros = ref<FacturaFiltrosRequest>({})
+const trimestreActual = Math.floor(new Date().getMonth() / 3) + 1
+const filtros = ref<FacturaFiltrosRequest>({ trimestre: trimestreActual })
 const busquedaLista = ref('')
 const search = ref('')
 
@@ -76,6 +88,14 @@ const tiposFiscalOptions = [
   { title: 'Importación', value: 'IMPORTACION' },
   { title: 'Servicios exterior', value: 'SERVICIOS_EXTERIOR' },
   { title: 'Permuta', value: 'PERMUTA' },
+]
+
+const trimestresOptions = [
+  { title: 'Todos', value: null },
+  { title: 'T1 (enero - marzo)', value: 1 },
+  { title: 'T2 (abril - junio)', value: 2 },
+  { title: 'T3 (julio - septiembre)', value: 3 },
+  { title: 'T4 (octubre - diciembre)', value: 4 },
 ]
 
 const estadoColor: Record<string, string> = {
@@ -121,7 +141,16 @@ function cargarFiltrosGuardados() {
   const raw = localStorage.getItem(filtrosStorageKey)
   if (!raw) return
   try {
-    filtros.value = JSON.parse(raw) as FacturaFiltrosRequest
+    const guardados = JSON.parse(raw) as FacturaFiltrosRequest
+    // Migra el antiguo preset "trimestre" al selector explícito del trimestre actual.
+    if (guardados.preset === 'trimestre') {
+      guardados.trimestre = trimestreActual
+      guardados.preset = undefined
+    }
+    else if (!guardados.trimestre && !guardados.fechaDesde && !guardados.fechaHasta && !guardados.preset) {
+      guardados.trimestre = trimestreActual
+    }
+    filtros.value = guardados
   }
   catch {
     localStorage.removeItem(filtrosStorageKey)
@@ -134,6 +163,40 @@ function cargarItemsPerPageGuardado() {
   const n = Number(raw)
   if (itemsPerPageOptions.some(o => o.value === n))
     itemsPerPage.value = n
+}
+
+function actualizarFechaFactura(campo: 'fechaDesde' | 'fechaHasta', value: string | null) {
+  filtros.value[campo] = value || undefined
+  if (value) {
+    filtros.value.trimestre = undefined
+    filtros.value.preset = undefined
+  }
+}
+
+function actualizarFechaDesde(value: string | null) {
+  actualizarFechaFactura('fechaDesde', value)
+}
+
+function actualizarFechaHasta(value: string | null) {
+  actualizarFechaFactura('fechaHasta', value)
+}
+
+function actualizarPresetFactura(value: string | null) {
+  filtros.value.preset = value || undefined
+  if (value) {
+    filtros.value.trimestre = undefined
+    filtros.value.fechaDesde = undefined
+    filtros.value.fechaHasta = undefined
+  }
+}
+
+function actualizarTrimestre(value: number | null) {
+  filtros.value.trimestre = value ?? undefined
+  if (value != null) {
+    filtros.value.preset = undefined
+    filtros.value.fechaDesde = undefined
+    filtros.value.fechaHasta = undefined
+  }
 }
 
 // ─── Quick filters ────────────────────────────────────────────────────────────
@@ -206,7 +269,7 @@ watch(search, (val) => {
 })
 
 function limpiarFiltros() {
-  filtros.value = {}
+  filtros.value = { trimestre: trimestreActual }
   search.value = ''
   localStorage.removeItem(filtrosStorageKey)
   page.value = 1
@@ -628,10 +691,34 @@ onMounted(async () => {
               <!-- Fecha factura -->
               <VCol cols="12" class="text-overline text-disabled pb-0">Fecha factura</VCol>
               <VCol cols="12" sm="6" md="3">
-                <AppTextField v-model="filtros.fechaDesde" label="Fecha desde" type="date" clearable density="compact" />
+                <AppTextField
+                  :model-value="filtros.fechaDesde"
+                  label="Fecha desde"
+                  type="date"
+                  clearable
+                  density="compact"
+                  @update:model-value="actualizarFechaDesde"
+                />
               </VCol>
               <VCol cols="12" sm="6" md="3">
-                <AppTextField v-model="filtros.fechaHasta" label="Fecha hasta" type="date" clearable density="compact" />
+                <AppTextField
+                  :model-value="filtros.fechaHasta"
+                  label="Fecha hasta"
+                  type="date"
+                  clearable
+                  density="compact"
+                  @update:model-value="actualizarFechaHasta"
+                />
+              </VCol>
+              <VCol cols="12" sm="6" md="3">
+                <AppSelect
+                  :model-value="filtros.trimestre"
+                  label="Trimestre"
+                  :items="trimestresOptions"
+                  clearable
+                  density="compact"
+                  @update:model-value="actualizarTrimestre"
+                />
               </VCol>
 
               <!-- Fecha petición -->
@@ -654,15 +741,15 @@ onMounted(async () => {
 
               <VCol cols="12" sm="6" md="3">
                 <AppSelect
-                  v-model="filtros.preset"
+                  :model-value="filtros.preset"
                   label="Preset factura"
                   :items="[
                     { title: 'Todos', value: null },
                     { title: 'Mes', value: 'mes' },
-                    { title: 'Trimestre', value: 'trimestre' },
                   ]"
                   clearable
                   density="compact"
+                  @update:model-value="actualizarPresetFactura"
                 />
               </VCol>
 
@@ -817,7 +904,7 @@ onMounted(async () => {
               />
               <VListItem
                 prepend-icon="tabler-arrows-exchange"
-                title="Conciliar por importe"
+                title="Conciliar con extractos"
                 to="/facturas/conciliacion-extracto-importe"
               />
             </VList>
@@ -952,6 +1039,18 @@ onMounted(async () => {
               label
               prepend-icon="tabler-robot"
             >Procesada IA</VChip>
+            <VTooltip text="Conciliar con movimientos" location="top">
+              <template #activator="{ props }">
+                <IconBtn
+                  v-bind="props"
+                  size="small"
+                  color="primary"
+                  @click.stop="abrirConciliacion(item)"
+                >
+                  <VIcon icon="tabler-arrows-exchange" />
+                </IconBtn>
+              </template>
+            </VTooltip>
              <!--Btn Ver Documento-->
             <VTooltip :text="item.rutaPdf ? 'Ver documento' : 'Ver detalle'" location="top">
               <template #activator="{ props }">
@@ -1094,6 +1193,11 @@ onMounted(async () => {
     </VDialog>
 
     <!-- Snackbar -->
+    <ConciliacionFacturaDialog
+      ref="conciliacionDialog"
+      @updated="conciliacionActualizada"
+    />
+
     <VSnackbar v-model="snackbar" :color="snackbarColor" timeout="4000">
       {{ snackbarMsg }}
     </VSnackbar>

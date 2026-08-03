@@ -25,6 +25,7 @@ declare module 'vue-router/auto-routes' {
     'ai-chat': RouteRecordInfo<'ai-chat', '/ai-chat', Record<never, never>, Record<never, never>>,
     'clientes': RouteRecordInfo<'clientes', '/clientes', Record<never, never>, Record<never, never>>,
     'codigos-cuenta-gasto': RouteRecordInfo<'codigos-cuenta-gasto', '/codigos-cuenta-gasto', Record<never, never>, Record<never, never>>,
+    'conciliar': RouteRecordInfo<'conciliar', '/conciliar', Record<never, never>, Record<never, never>>,
     'entidades': RouteRecordInfo<'entidades', '/entidades', Record<never, never>, Record<never, never>>,
     'extractos': RouteRecordInfo<'extractos', '/extractos', Record<never, never>, Record<never, never>>,
     'extractos-id': RouteRecordInfo<'extractos-id', '/extractos/:id', { id: ParamValue<true> }, { id: ParamValue<false> }>,
