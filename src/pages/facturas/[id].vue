@@ -33,6 +33,21 @@ async function onProveedorCreado(proveedor: ProveedorFacturaDto) {
   proveedores.value.push(proveedor)
   await nextTick()
   form.value.proveedorFacturaId = proveedor.id
+  aplicarDefectosProveedor(proveedor.id)
+}
+
+// Al seleccionar/cambiar el proveedor (o al cargar una factura recién creada sin estos datos),
+// precargar su tipo de facturación y código de cuenta por defecto (si los tiene configurados)
+// para no tener que repetirlos en cada factura.
+// `soloSiVacio` evita pisar valores que la factura ya trae (p. ej. extraídos por la IA o guardados antes).
+function aplicarDefectosProveedor(proveedorId: number | null, soloSiVacio = false) {
+  if (!proveedorId) return
+  const proveedor = proveedores.value.find(p => p.id === proveedorId)
+  if (!proveedor) return
+  if (proveedor.tipoFacturacion && (!soloSiVacio || !form.value.tipo))
+    form.value.tipo = proveedor.tipoFacturacion
+  if (proveedor.codigoCuentaGastoId && (!soloSiVacio || !form.value.codigoCuentaGastoId))
+    form.value.codigoCuentaGastoId = proveedor.codigoCuentaGastoId
 }
 
 // ─── Dropdown data ────────────────────────────────────────────────────────────
@@ -47,6 +62,7 @@ const form = ref({
   tipoFacturaFiscal: '',
   numeroFactura: '',
   fechaFactura: '',
+  fechaTrimestre: '',
   fechaPeticionFactura: '',
   ivaBase0: 0,
   ivaBase4: 0,
@@ -196,6 +212,7 @@ function fillForm(f: FacturaProveedorDto) {
     tipoFacturaFiscal: f.tipoFacturaFiscal ?? '',
     numeroFactura: f.numeroFactura ?? '',
     fechaFactura: f.fechaFactura ? f.fechaFactura.substring(0, 10) : '',
+    fechaTrimestre: f.fechaTrimestre ? f.fechaTrimestre.substring(0, 10) : '',
     fechaPeticionFactura: f.fechaPeticionFactura ? f.fechaPeticionFactura.substring(0, 10) : '',
     ivaBase0, ivaBase4, ivaBase10, ivaBase21,
     irpf: f.irpf ?? 0,
@@ -257,6 +274,7 @@ async function guardar() {
         tipoFacturaFiscal: form.value.tipoFacturaFiscal || null,
         numeroFactura: form.value.numeroFactura,
         fechaFactura: form.value.fechaFactura || null,
+        fechaTrimestre: form.value.fechaTrimestre || null,
         fechaPeticionFactura: form.value.fechaPeticionFactura || null,
         lineasIva: [
           { porcentajeIva: 0,  baseImponible: form.value.ivaBase0 || 0 },
@@ -356,6 +374,7 @@ onMounted(async () => {
       $api<CodigoCuentaGastoDto[]>('/codigos-cuenta-gasto'),
     ])
     fillForm(factura.value)
+    aplicarDefectosProveedor(factura.value.proveedorFacturaId ?? null, true)
     if (factura.value.rutaPdf)
       cargarPdf()
   }
@@ -415,6 +434,7 @@ onUnmounted(() => {
                     label="Proveedor"
                     :items="proveedoresItems"
                     clearable
+                    @update:model-value="aplicarDefectosProveedor"
                   />
                  
                 </VCol>
@@ -485,6 +505,15 @@ onUnmounted(() => {
                 <AppTextField v-model="form.fechaFactura" label="Fecha factura" type="date" />
               </VCol>
               <VCol cols="12" sm="6">
+                <AppTextField
+                  v-model="form.fechaTrimestre"
+                  label="Trimestre asignado"
+                  type="date"
+                  hint="Primer día del trimestre/año en que se contabiliza esta factura. Por defecto se calcula desde la fecha de factura; cámbialo para reasignarla a otro periodo."
+                  persistent-hint
+                />
+              </VCol>
+              <VCol cols="12" sm="6">
                 <AppSelect v-model="form.tipo" label="Tipo" :items="tiposFactura" clearable />
               </VCol>
               <VCol v-if="esFacturaOProforma" cols="12" sm="6">
@@ -499,12 +528,19 @@ onUnmounted(() => {
                 <AppSelect v-model="form.entidadId" label="A quien se aplica" :items="entidadesItems" clearable />
               </VCol>
               <VCol cols="12" sm="6">
-                <AppSelect
-                  v-model="form.tipoPagoId"
-                  label="Tipo de pago"
-                  :items="tiposPagoItems"
-                  clearable
-                />
+                <p class="text-body-2 text-medium-emphasis mb-1">Tipo de pago</p>
+                <div class="d-flex flex-wrap gap-2">
+                  <VBtn
+                    v-for="item in tiposPagoItems"
+                    :key="String(item.value)"
+                    size="small"
+                    :color="form.tipoPagoId === item.value ? 'primary' : undefined"
+                    :variant="form.tipoPagoId === item.value ? 'flat' : 'tonal'"
+                    @click="form.tipoPagoId = item.value"
+                  >
+                    {{ item.title }}
+                  </VBtn>
+                </div>
               </VCol>
               <VCol v-if="muestraCuentaGasto" cols="12">
                 <AppSelect
@@ -628,14 +664,22 @@ onUnmounted(() => {
           <VCardItem><VCardTitle>Estado y notas</VCardTitle></VCardItem>
           <VCardText>
             <VRow>
-              <VCol cols="12" sm="6">
-                <AppSelect
-                  v-model="nuevoEstado"
-                  label="Cambiar estado"
-                  :items="estadosDisponibles.map(e => ({ title: estadoLabel[e], value: e }))"
-                />
+              <VCol cols="12">
+                <p class="text-body-2 text-medium-emphasis mb-1">Cambiar estado</p>
+                <div class="d-flex flex-wrap gap-2">
+                  <VBtn
+                    v-for="e in estadosDisponibles"
+                    :key="e"
+                    size="small"
+                    :color="nuevoEstado === e ? 'primary' : undefined"
+                    :variant="nuevoEstado === e ? 'flat' : 'tonal'"
+                    @click="nuevoEstado = e"
+                  >
+                    {{ estadoLabel[e] }}
+                  </VBtn>
+                </div>
               </VCol>
-              <VCol cols="12" sm="6" class="d-flex align-end pb-1">
+              <VCol cols="12" class="d-flex">
                 <VBtn :loading="estadoSaving" variant="tonal" @click="cambiarEstado">
                   Aplicar estado
                 </VBtn>

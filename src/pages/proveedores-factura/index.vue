@@ -35,6 +35,13 @@ const page = ref(1)
 const itemsPerPage = ref(10)
 watch(search, () => { page.value = 1 })
 
+const tipoFacturacionLabel: Record<string, string> = {
+  INDETERMINADA: 'Indeterminada',
+  FACTURA: 'Factura',
+  TICKET: 'Ticket',
+  PROFORMA: 'Proforma',
+}
+
 const headers = [
   { title: 'ID', key: 'id', width: 80 },
   { title: 'CIF', key: 'cif', width: 100 },
@@ -43,6 +50,8 @@ const headers = [
   { title: 'C.P.', key: 'codigoPostal', width: 100 },
   { title: 'Localidad', key: 'localidad', width: 100 },
   { title: 'Cód. Contable', key: 'codigoContable', width: 140 },
+  { title: 'Tipo Facturación', key: 'tipoFacturacion', width: 150 },
+  { title: 'Cód. Cuenta', key: 'codigoCuentaGastoCodigo', width: 130 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
 ]
 </script>
@@ -83,6 +92,9 @@ const headers = [
         item-value="id"
         hover
       >
+        <template #item.tipoFacturacion="{ item }">
+          {{ item.tipoFacturacion ? tipoFacturacionLabel[item.tipoFacturacion] ?? item.tipoFacturacion : '' }}
+        </template>
         <template #item.actions="{ item }">
           <div class="d-flex gap-1">
             <IconBtn size="small" @click="openEdit(item)">

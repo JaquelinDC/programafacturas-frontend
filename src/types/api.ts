@@ -129,6 +129,9 @@ export interface ProveedorFacturaDto {
   codigoPostal?: string
   localidad?: string
   codigoContable?: string
+  tipoFacturacion?: string
+  codigoCuentaGastoId?: number
+  codigoCuentaGastoCodigo?: string
 }
 
 export interface ConceptoMovimientoConciliacionDto {
@@ -209,6 +212,7 @@ export interface FacturaProveedorDto {
   tipoFacturaFiscal?: string
   numeroFactura?: string
   fechaFactura?: string
+  fechaTrimestre?: string
   fechaPeticionFactura?: string
   fechaCreacion?: string
   fechaExportacionContabilidad?: string
@@ -387,6 +391,7 @@ export interface FacturaFiltrosRequest {
   fechaDesde?: string
   fechaHasta?: string
   preset?: string
+  anio?: number
   trimestre?: number
   fechaCreacionDesde?: string
   fechaCreacionHasta?: string

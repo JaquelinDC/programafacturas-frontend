@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { EntidadDto, FacturaFiltrosRequest, FacturaProveedorDto } from '@/types/api'
 import { $api } from '@/utils/api'
+import { usePeriodoStore } from '@/stores/periodo'
+
+const periodoStore = usePeriodoStore()
 
 definePage({ meta: { title: 'Facturas Proveedores' } })
 
@@ -42,8 +45,13 @@ function buildCacheKey(body: FacturaFiltrosRequest, pg: number, sz: number, sort
   return JSON.stringify({ ...body, page: pg, size: sz, ...(sort ? { sortBy: sort.key, sortDir: sort.order } : {}) })
 }
 
+// ─── Caché de totales (Base/IVA/Total del listado filtrado, sin paginar) ──────
+interface TotalesCacheEntry { base: number; iva: number; total: number; ts: number }
+const totalesCache = new Map<string, TotalesCacheEntry>()
+
 function limpiarCache() {
   pageCache.clear()
+  totalesCache.clear()
 }
 
 function abrirConciliacion(factura: FacturaProveedorDto) {
@@ -57,8 +65,9 @@ async function conciliacionActualizada() {
 }
 
 // ─── Filtros ──────────────────────────────────────────────────────────────────
-const trimestreActual = Math.floor(new Date().getMonth() / 3) + 1
-const filtros = ref<FacturaFiltrosRequest>({ trimestre: trimestreActual })
+// El año/trimestre por defecto se toma del selector global de la barra de navegación
+// (usePeriodoStore); aquí solo se gestionan los filtros avanzados (fecha manual, tipo, etc.).
+const filtros = ref<FacturaFiltrosRequest>({})
 const busquedaLista = ref('')
 const search = ref('')
 
@@ -88,14 +97,6 @@ const tiposFiscalOptions = [
   { title: 'Importación', value: 'IMPORTACION' },
   { title: 'Servicios exterior', value: 'SERVICIOS_EXTERIOR' },
   { title: 'Permuta', value: 'PERMUTA' },
-]
-
-const trimestresOptions = [
-  { title: 'Todos', value: null },
-  { title: 'T1 (enero - marzo)', value: 1 },
-  { title: 'T2 (abril - junio)', value: 2 },
-  { title: 'T3 (julio - septiembre)', value: 3 },
-  { title: 'T4 (octubre - diciembre)', value: 4 },
 ]
 
 const estadoColor: Record<string, string> = {
@@ -142,14 +143,11 @@ function cargarFiltrosGuardados() {
   if (!raw) return
   try {
     const guardados = JSON.parse(raw) as FacturaFiltrosRequest
-    // Migra el antiguo preset "trimestre" al selector explícito del trimestre actual.
-    if (guardados.preset === 'trimestre') {
-      guardados.trimestre = trimestreActual
+    // El año/trimestre ahora vive en el selector global (usePeriodoStore), no en este filtro guardado.
+    guardados.anio = undefined
+    guardados.trimestre = undefined
+    if (guardados.preset === 'trimestre')
       guardados.preset = undefined
-    }
-    else if (!guardados.trimestre && !guardados.fechaDesde && !guardados.fechaHasta && !guardados.preset) {
-      guardados.trimestre = trimestreActual
-    }
     filtros.value = guardados
   }
   catch {
@@ -167,10 +165,8 @@ function cargarItemsPerPageGuardado() {
 
 function actualizarFechaFactura(campo: 'fechaDesde' | 'fechaHasta', value: string | null) {
   filtros.value[campo] = value || undefined
-  if (value) {
-    filtros.value.trimestre = undefined
+  if (value)
     filtros.value.preset = undefined
-  }
 }
 
 function actualizarFechaDesde(value: string | null) {
@@ -184,16 +180,6 @@ function actualizarFechaHasta(value: string | null) {
 function actualizarPresetFactura(value: string | null) {
   filtros.value.preset = value || undefined
   if (value) {
-    filtros.value.trimestre = undefined
-    filtros.value.fechaDesde = undefined
-    filtros.value.fechaHasta = undefined
-  }
-}
-
-function actualizarTrimestre(value: number | null) {
-  filtros.value.trimestre = value ?? undefined
-  if (value != null) {
-    filtros.value.preset = undefined
     filtros.value.fechaDesde = undefined
     filtros.value.fechaHasta = undefined
   }
@@ -213,11 +199,40 @@ function aplicarFiltroRapido(patch: Partial<FacturaFiltrosRequest>) {
 }
 
 // ─── Búsqueda ─────────────────────────────────────────────────────────────────
-async function buscar() {
+// Filtros realmente aplicados al listado: usados tanto para buscar() como para exportar(),
+// para que la tabla y el fichero exportado coincidan siempre.
+function filtrosEfectivos(): FacturaFiltrosRequest {
   const body = sanitizarFiltros(filtros.value)
+  if (body.search) {
+    // La búsqueda rápida debe encontrar la factura sin importar el periodo activo ni el rango
+    // de fechas manual: si no, un ID o nº de factura de otro periodo quedaría oculto igualmente.
+    delete body.preset
+    delete body.fechaDesde
+    delete body.fechaHasta
+    return body
+  }
+  const usaFiltroManualDeFecha = !!(body.fechaDesde || body.fechaHasta || body.preset)
+  if (!usaFiltroManualDeFecha) {
+    // Sin filtro manual de fecha: aplica el periodo del selector global (año + trimestre).
+    if (periodoStore.trimestre >= 1 && periodoStore.trimestre <= 4) {
+      body.anio = periodoStore.anio
+      body.trimestre = periodoStore.trimestre
+    }
+    else {
+      // "Año completo": no hay trimestre concreto, se filtra por el rango de fechas del año.
+      body.fechaDesde = periodoStore.fechaDesde
+      body.fechaHasta = periodoStore.fechaHasta
+    }
+  }
+  return body
+}
+
+async function buscar() {
+  const body = filtrosEfectivos()
   busquedaLista.value = JSON.stringify(body)
   guardarFiltros()
   guardarItemsPerPage()
+  cargarTotales(body)
   const sort = sortBy.value[0]
   const pg = page.value - 1
   const sz = itemsPerPage.value === -1 ? 99999 : itemsPerPage.value
@@ -269,7 +284,7 @@ watch(search, (val) => {
 })
 
 function limpiarFiltros() {
-  filtros.value = { trimestre: trimestreActual }
+  filtros.value = {}
   search.value = ''
   localStorage.removeItem(filtrosStorageKey)
   page.value = 1
@@ -290,10 +305,38 @@ async function handleTableOptions(options: { page: number; itemsPerPage: number;
 // ─── Paginación ───────────────────────────────────────────────────────────────
 const pageCount = computed(() => itemsPerPage.value > 0 ? Math.ceil(totalItems.value / itemsPerPage.value) : 1)
 
-// ─── Totales (de la página actual) ───────────────────────────────────────────
-const totalImporte = computed(() => facturas.value.reduce((s, f) => s + (f.importeTotal ?? 0), 0))
-const totalBase = computed(() => facturas.value.reduce((s, f) => s + (f.baseImponible ?? 0), 0))
-const totalIva = computed(() => facturas.value.reduce((s, f) => s + (f.iva ?? 0), 0))
+// ─── Totales (de todo el listado filtrado, sin paginar) ──────────────────────
+const totalBase = ref(0)
+const totalIva = ref(0)
+const totalImporte = ref(0)
+
+async function cargarTotales(body: FacturaFiltrosRequest) {
+  const cacheKey = JSON.stringify(body)
+  const cached = totalesCache.get(cacheKey)
+  if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
+    totalBase.value = cached.base
+    totalIva.value = cached.iva
+    totalImporte.value = cached.total
+    return
+  }
+  try {
+    const response = await $api<{ baseImponible: number; iva: number; importeTotal: number }>('/facturas/totales', {
+      query: body,
+    })
+    totalBase.value = response.baseImponible ?? 0
+    totalIva.value = response.iva ?? 0
+    totalImporte.value = response.importeTotal ?? 0
+
+    if (totalesCache.size >= MAX_CACHE_ENTRIES) {
+      const oldest = [...totalesCache.entries()].sort((a, b) => a[1].ts - b[1].ts)[0]
+      totalesCache.delete(oldest[0])
+    }
+    totalesCache.set(cacheKey, { base: totalBase.value, iva: totalIva.value, total: totalImporte.value, ts: Date.now() })
+  }
+  catch (e) {
+    console.error(e)
+  }
+}
 
 // ─── Formato ──────────────────────────────────────────────────────────────────
 const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '—'
@@ -404,13 +447,26 @@ function limpiarSeleccion() {
   selectedFacturaIds.value = []
 }
 
+function abrirExportDialog(format: string) {
+  exportFormat.value = format
+  marcarContabilidad.value = false
+  showExportDialog.value = true
+}
+
+const exportFormatLabels: Record<string, string> = {
+  excel: 'Excel',
+  excel_fiscal: 'Excel fiscal',
+  excel_tickets: 'Tickets contable',
+}
+const exportDialogTitle = computed(() => `Exportar — ${exportFormatLabels[exportFormat.value] ?? 'Excel'}`)
+
 async function exportar(format: string, marcar = false) {
   exportLoading.value = true
   try {
     const accessToken = useCookie('accessToken').value
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
     const body = {
-      filtros: sanitizarFiltros(filtros.value),
+      filtros: filtrosEfectivos(),
       format,
       marcarExportacionContabilidad: marcar,
     }
@@ -593,6 +649,15 @@ onMounted(async () => {
   await buscar()
   tableReady.value = true
 })
+
+// El selector global de año/trimestre (navbar) puede cambiar en cualquier momento: recarga el
+// listado cuando no hay un filtro manual de fecha activo (si lo hay, ese filtro manda).
+watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
+  if (tableReady.value && !filtros.value.fechaDesde && !filtros.value.fechaHasta && !filtros.value.preset) {
+    page.value = 1
+    buscar()
+  }
+})
 </script>
 
 <template>
@@ -710,15 +775,11 @@ onMounted(async () => {
                   @update:model-value="actualizarFechaHasta"
                 />
               </VCol>
-              <VCol cols="12" sm="6" md="3">
-                <AppSelect
-                  :model-value="filtros.trimestre"
-                  label="Trimestre"
-                  :items="trimestresOptions"
-                  clearable
-                  density="compact"
-                  @update:model-value="actualizarTrimestre"
-                />
+              <VCol cols="12" sm="6" md="3" class="d-flex align-center">
+                <span class="text-caption text-disabled">
+                  Sin fecha manual, se usa el periodo del selector de la barra superior
+                  ({{ periodoStore.anio }} · {{ periodoStore.trimestre >= 1 && periodoStore.trimestre <= 4 ? `T${periodoStore.trimestre}` : 'año completo' }}).
+                </span>
               </VCol>
 
               <!-- Fecha petición -->
@@ -922,10 +983,10 @@ onMounted(async () => {
               >Exportar</VBtn>
             </template>
             <VList density="compact" min-width="240">
-              <VListItem prepend-icon="tabler-table-export" title="Excel" @click="exportar('excel')" />
-              <VListItem prepend-icon="tabler-receipt-tax" title="Excel fiscal" @click="exportar('excel_fiscal')" />
-              <VListItem prepend-icon="tabler-receipt" title="Tickets contable" @click="exportar('excel_tickets')" />
-              <VListItem prepend-icon="tabler-file-check" title="Export. contabilidad" @click="showExportDialog = true" />
+              <VListItem prepend-icon="tabler-table-export" title="Excel" @click="abrirExportDialog('excel')" />
+              <VListItem prepend-icon="tabler-receipt-tax" title="Excel fiscal" @click="abrirExportDialog('excel_fiscal')" />
+              <VListItem prepend-icon="tabler-receipt" title="Tickets contable" @click="abrirExportDialog('excel_tickets')" />
+              <VListItem prepend-icon="tabler-file-type-csv" title="CSV" @click="exportar('csv')" />
             </VList>
           </VMenu>
         </template>
@@ -936,7 +997,7 @@ onMounted(async () => {
           <VCol cols="12" offset-md="8" md="4">
             <AppTextField
               v-model="search"
-              placeholder="Buscar..."
+              placeholder="Buscar por ID, proveedor, CIF, nº factura, importe o fecha (dd/mm/aaaa)..."
               append-inner-icon="tabler-search"
               single-line
               hide-details
@@ -1096,7 +1157,7 @@ onMounted(async () => {
               @update:model-value="buscar"
             />
           </div>
-          <!-- Totales de la página actual -->
+          <!-- Totales del listado filtrado completo (sin tener en cuenta la paginación) -->
           <VDivider />
           <div class="d-flex justify-end align-center gap-6 text-body-2 font-weight-bold px-4 py-2 flex-wrap">
             <span class="text-medium-emphasis font-weight-regular">{{ facturas.length }} en página · {{ totalItems }} en total</span>
@@ -1126,10 +1187,10 @@ onMounted(async () => {
     <!-- Dialog exportar con marcar contabilidad -->
     <VDialog v-model="showExportDialog" max-width="420">
       <VCard>
-        <VCardTitle class="pa-4">Exportar a contabilidad</VCardTitle>
+        <VCardTitle class="pa-4">{{ exportDialogTitle }}</VCardTitle>
         <VCardText>
           <p class="text-body-2 mb-4">
-            Descarga el Excel con los filtros actuales y opcionalmente marca las facturas como exportadas a contabilidad.
+            Antes de descargar el fichero, indique si debe tratarse como exportación para contabilidad.
           </p>
           <AppSelect
             v-model="exportFormat"
@@ -1142,10 +1203,19 @@ onMounted(async () => {
           />
           <VSwitch
             v-model="marcarContabilidad"
-            label="Marcar como exportadas a contabilidad"
+            label="Exportar para contabilidad"
             color="warning"
             class="mt-3"
+            hide-details
           />
+          <p class="text-caption text-medium-emphasis mt-2">
+            <template v-if="marcarContabilidad">
+              Se guardará la fecha en cada registro incluido en el fichero y, en exportaciones posteriores con esta opción activada, no se volverán a incluir los ya exportados.
+            </template>
+            <template v-else>
+              Si no marca la casilla, la descarga no modifica fechas ni excluye registros en el futuro.
+            </template>
+          </p>
         </VCardText>
         <VCardActions class="pa-4">
           <VSpacer />

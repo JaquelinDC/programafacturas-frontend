@@ -4,25 +4,13 @@ import { useTheme } from 'vuetify'
 import type { DashboardResumen } from '@/types/dashboard'
 import { $api } from '@/utils/api'
 import { useAuthStore } from '@/stores/auth'
+import { usePeriodoStore } from '@/stores/periodo'
 
 definePage({ meta: { title: 'Inicio' } })
 
 const vuetifyTheme = useTheme()
 const authStore = useAuthStore()
-
-// ─── Filtros ──────────────────────────────────────────────────────────────────
-const anioActual = new Date().getFullYear()
-const anios = Array.from({ length: 5 }, (_, i) => anioActual - i)
-const trimestres = [
-  { title: 'Año completo', value: 0 },
-  { title: 'T1 (Ene-Mar)', value: 1 },
-  { title: 'T2 (Abr-Jun)', value: 2 },
-  { title: 'T3 (Jul-Sep)', value: 3 },
-  { title: 'T4 (Oct-Dic)', value: 4 },
-]
-
-const anioSeleccionado = ref(anioActual)
-const trimestreSeleccionado = ref(0)
+const periodoStore = usePeriodoStore()
 
 // ─── Datos ────────────────────────────────────────────────────────────────────
 const datos = ref<DashboardResumen | null>(null)
@@ -32,7 +20,7 @@ async function cargarDatos() {
   cargando.value = true
   try {
     datos.value = await $api<DashboardResumen>('/dashboard/resumen', {
-      params: { anio: anioSeleccionado.value, trimestre: trimestreSeleccionado.value },
+      params: { anio: periodoStore.anio, trimestre: periodoStore.trimestre },
     })
   }
   finally {
@@ -40,7 +28,7 @@ async function cargarDatos() {
   }
 }
 
-watch([anioSeleccionado, trimestreSeleccionado], cargarDatos, { immediate: true })
+watch([() => periodoStore.anio, () => periodoStore.trimestre], cargarDatos, { immediate: true })
 
 // ─── Helpers de formato ──────────────────────────────────────────────────────
 function fmtEur(n: number | undefined | null): string {
@@ -269,24 +257,9 @@ const headersMovimientos = [
         </div>
 
         <div class="d-flex align-center gap-3 flex-wrap">
-          <VSelect
-            v-model="anioSeleccionado"
-            :items="anios"
-            label="Año"
-            density="compact"
-            hide-details
-            style="min-width: 100px; max-width: 120px"
-          />
-          <VSelect
-            v-model="trimestreSeleccionado"
-            :items="trimestres"
-            item-title="title"
-            item-value="value"
-            label="Periodo"
-            density="compact"
-            hide-details
-            style="min-width: 150px; max-width: 180px"
-          />
+          <span class="text-caption text-medium-emphasis">
+            Periodo: usa el selector de la barra superior para cambiarlo
+          </span>
           <VBtn
             icon
             variant="tonal"
@@ -361,8 +334,8 @@ const headersMovimientos = [
                 variant="tonal"
                 color="primary"
               >
-                {{ anioSeleccionado }}
-                {{ trimestreSeleccionado > 0 ? `T${trimestreSeleccionado}` : '' }}
+                {{ periodoStore.anio }}
+                {{ periodoStore.trimestre > 0 ? `T${periodoStore.trimestre}` : '' }}
               </VChip>
             </template>
           </VCardItem>

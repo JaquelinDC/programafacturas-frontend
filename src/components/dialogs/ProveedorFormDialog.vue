@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { $api } from '@/utils/api'
-import type { ConceptoMovimientoConciliacionDto, ProveedorFacturaDto } from '@/types/api'
+import type { CodigoCuentaGastoDto, ConceptoMovimientoConciliacionDto, ProveedorFacturaDto } from '@/types/api'
 
 interface Props {
   modelValue: boolean
@@ -29,9 +29,32 @@ const emptyForm = () => ({
   codigoPostal: '',
   localidad: '',
   codigoContable: '',
+  tipoFacturacion: '',
+  codigoCuentaGastoId: null as number | null,
 })
 
 const form = ref(emptyForm())
+
+const tiposFacturacion = [
+  { title: 'Indeterminada', value: 'INDETERMINADA' },
+  { title: 'Factura', value: 'FACTURA' },
+  { title: 'Ticket', value: 'TICKET' },
+  { title: 'Proforma', value: 'PROFORMA' },
+]
+
+const codigosCuenta = ref<CodigoCuentaGastoDto[]>([])
+const codigosCuentaItems = computed(() =>
+  codigosCuenta.value.map(c => ({ title: `${c.codigo} — ${c.descripcion}`, value: c.id }))
+)
+
+async function cargarCodigosCuenta() {
+  try {
+    codigosCuenta.value = await $api<CodigoCuentaGastoDto[]>('/codigos-cuenta-gasto')
+  }
+  catch {
+    codigosCuenta.value = []
+  }
+}
 
 watch(() => props.modelValue, open => {
   if (open) {
@@ -43,9 +66,13 @@ watch(() => props.modelValue, open => {
       codigoPostal: props.proveedor?.codigoPostal ?? '',
       localidad: props.proveedor?.localidad ?? '',
       codigoContable: props.proveedor?.codigoContable ?? '',
+      tipoFacturacion: props.proveedor?.tipoFacturacion ?? '',
+      codigoCuentaGastoId: props.proveedor?.codigoCuentaGastoId ?? null,
     }
     conceptos.value = []
     nuevoConcepto.value = ''
+    if (!codigosCuenta.value.length)
+      cargarCodigosCuenta()
     if (props.proveedor?.id)
       cargarConceptos(props.proveedor.id)
   }
@@ -158,6 +185,22 @@ async function save() {
             </VCol>
             <VCol cols="12" sm="8">
               <AppTextField v-model="form.localidad" label="Localidad" />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <AppSelect
+                v-model="form.tipoFacturacion"
+                label="Tipo facturación (por defecto)"
+                :items="tiposFacturacion"
+                clearable
+              />
+            </VCol>
+            <VCol cols="12" sm="6">
+              <AppSelect
+                v-model="form.codigoCuentaGastoId"
+                label="Cód. cuenta gasto (por defecto)"
+                :items="codigosCuentaItems"
+                clearable
+              />
             </VCol>
             <VCol v-if="proveedor" cols="12">
               <div class="text-subtitle-2 mb-2">Conceptos aprendidos de movimientos</div>

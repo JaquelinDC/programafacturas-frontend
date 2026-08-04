@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import type { ClienteDto, FacturaEmitidaDraftDto, FacturaEmitidaDto, PageResponse } from '@/types/api'
 import { $api } from '@/utils/api'
+import { usePeriodoStore } from '@/stores/periodo'
+
+const periodoStore = usePeriodoStore()
 
 definePage({ meta: { title: 'Facturas Emitidas' } })
 
@@ -124,7 +127,9 @@ function limpiarCache() {
   pageCache.clear()
 }
 
-const filtros = ref({ numeroFactura: '', cliente: '', referencia: '', fechaDesde: '', fechaHasta: '' })
+// Fecha desde/hasta arrancan con el periodo del selector global (año + trimestre de la navbar);
+// el usuario puede sobreescribirlas manualmente para un rango distinto.
+const filtros = ref({ numeroFactura: '', cliente: '', referencia: '', fechaDesde: periodoStore.fechaDesde, fechaHasta: periodoStore.fechaHasta })
 const form = ref({ numeroFactura: '', fechaFactura: '', referencia: '', formaPago: '', importe: 0, baseImponible: 0, iva: 0, clienteId: null as number | null })
 const uploadFile = ref<File | File[] | null>(null)
 const procesandoDocumento = ref(false)
@@ -154,10 +159,20 @@ function showMsg(msg: string, color: 'success' | 'error' = 'success') {
 }
 
 function limpiarFiltros() {
-  filtros.value = { numeroFactura: '', cliente: '', referencia: '', fechaDesde: '', fechaHasta: '' }
+  filtros.value = { numeroFactura: '', cliente: '', referencia: '', fechaDesde: periodoStore.fechaDesde, fechaHasta: periodoStore.fechaHasta }
   page.value = 1
   fetchAll()
 }
+
+// El selector global de año/trimestre (navbar) actualiza el rango por defecto de esta pantalla.
+watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
+  filtros.value.fechaDesde = periodoStore.fechaDesde
+  filtros.value.fechaHasta = periodoStore.fechaHasta
+  if (tableReady.value) {
+    page.value = 1
+    fetchAll()
+  }
+})
 
 const clientesItems = computed(() => clientes.value.map(c => ({ title: c.cif ? `${c.nombre} (${c.cif})` : c.nombre, value: c.id })))
 
