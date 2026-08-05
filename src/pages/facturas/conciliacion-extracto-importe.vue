@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import type { FacturaConciliacionImporteDto } from '@/types/api'
+import type { ConciliacionFacturaDto, FacturaConciliacionImporteDto, PageResponse } from '@/types/api'
 import { $api } from '@/utils/api'
+import { useConciliacion } from '@/composables/useConciliacion'
+import BadgeCoincidenciaConciliacion from '@/components/conciliacion/BadgeCoincidenciaConciliacion.vue'
+import BotonDescartarSugerencia from '@/components/conciliacion/BotonDescartarSugerencia.vue'
+import EnlaceAltaManualFactura from '@/components/conciliacion/EnlaceAltaManualFactura.vue'
+import FiltrosBusquedaConciliacion from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import type { FiltrosConciliacion } from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import PanelBusquedaManualConciliacion from '@/components/conciliacion/PanelBusquedaManualConciliacion.vue'
 
 definePage({ meta: { title: 'Conciliación de facturas y movimientos' } })
 
@@ -15,6 +22,19 @@ const automatico = ref(true)
 const usarFecha = ref(true)
 const usarImporte = ref(true)
 const usarConceptos = ref(true)
+const filtros = ref<FiltrosConciliacion>({})
+const busquedaManualDialog = ref(false)
+const facturaParaBusquedaManual = ref<ConciliacionFacturaDto>()
+
+const page = ref(1)
+const itemsPerPage = ref(20)
+const totalItems = ref(0)
+
+const itemsPerPageOptions = [
+  { title: '10', value: 10 },
+  { title: '20', value: 20 },
+  { title: '50', value: 50 },
+]
 
 const snackbar = ref(false)
 const snackbarMsg = ref('')
@@ -42,15 +62,18 @@ async function verPdf(facturaId: number) {
   try {
     const accessToken = useCookie('accessToken').value
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+
     const response = await fetch(`${baseUrl}/facturas/${facturaId}/pdf`, {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     })
 
     if (!response.ok) {
       showMsg('No se pudo cargar el documento de la factura', 'error')
+
       return
     }
     const blob = await response.blob()
+
     pdfUrl.value = URL.createObjectURL(blob)
     pdfDialogOpen.value = true
   }
@@ -65,12 +88,27 @@ async function verPdf(facturaId: number) {
 async function cargar() {
   if (!automatico.value && !usarFecha.value && !usarImporte.value && !usarConceptos.value) {
     showMsg('Selecciona al menos un criterio de conciliación', 'error')
+
     return
   }
   loading.value = true
   try {
-    const resultado = await $api<FacturaConciliacionImporteDto[]>(`/facturas/conciliacion-extracto-por-importe?${criteriosQuery()}`)
-    items.value = resultado
+    const response = await $api<PageResponse<FacturaConciliacionImporteDto>>('/facturas/conciliacion-extracto-por-importe', {
+      params: {
+        automatico: automatico.value,
+        usarFecha: usarFecha.value,
+        usarImporte: usarImporte.value,
+        usarConceptos: usarConceptos.value,
+        fechaDesde: filtros.value.fechaDesde || undefined,
+        fechaHasta: filtros.value.fechaHasta || undefined,
+        importe: filtros.value.importe ?? undefined,
+        proveedorId: filtros.value.proveedorId ?? undefined,
+        page: page.value - 1,
+        size: itemsPerPage.value,
+      },
+    })
+
+    items.value = response.content
       .map((item, ordenOriginal) => ({ item, ordenOriginal }))
       .sort((a, b) => {
         const aMultiple = a.item.movimientos.length > 1 ? 1 : 0
@@ -79,6 +117,7 @@ async function cargar() {
         return bMultiple - aMultiple || a.ordenOriginal - b.ordenOriginal
       })
       .map(({ item }) => item)
+    totalItems.value = response.totalElements
     selectedMovimientosPorFactura.value = Object.fromEntries(
       items.value
         .filter(item => item.movimientos[0]?.movimientoId != null)
@@ -93,6 +132,12 @@ async function cargar() {
   }
 }
 
+function cargarDesdePagina1() {
+  page.value = 1
+
+  return cargar()
+}
+
 function criteriosQuery() {
   return new URLSearchParams({
     automatico: String(automatico.value),
@@ -105,27 +150,36 @@ function criteriosQuery() {
 const facturaIdsSeleccionadas = computed(() => Object.entries(selectedMovimientosPorFactura.value)
   .filter(([, movimientoIds]) => movimientoIds.length)
   .map(([facturaId]) => Number(facturaId)))
+
 const movimientosSeleccionadosCount = computed(() => Object.values(selectedMovimientosPorFactura.value)
   .reduce((total, movimientoIds) => total + movimientoIds.length, 0))
+
 const selectedFacturaIds = computed(() => facturaIdsAConciliar.value)
+
 const selectedMovimientoIds = computed(() => facturaIdsAConciliar.value
   .flatMap(facturaId => selectedMovimientosPorFactura.value[facturaId] ?? []))
+
 const vinculosAConciliarCount = computed(() => selectedMovimientoIds.value.length)
+
 const facturasSeleccionadasPorMovimiento = computed(() => {
   const selecciones = new Map<number, Set<number>>()
   for (const [facturaIdRaw, movimientoIds] of Object.entries(selectedMovimientosPorFactura.value)) {
     const facturaId = Number(facturaIdRaw)
     for (const movimientoId of movimientoIds) {
       const facturaIds = selecciones.get(movimientoId) ?? new Set<number>()
+
       facturaIds.add(facturaId)
       selecciones.set(movimientoId, facturaIds)
     }
   }
+
   return selecciones
 })
+
 const movimientosRepetidosEnSeleccionActual = computed(() =>
   [...facturasSeleccionadasPorMovimiento.value.values()].filter(facturaIds => facturaIds.size > 1).length,
 )
+
 const itemsVisibles = computed(() => {
   if (!soloConflictos.value)
     return items.value
@@ -138,15 +192,59 @@ const itemsVisibles = computed(() => {
     }))
     .filter(item => item.movimientos.length)
 })
+
+function abrirBusquedaManual(item: FacturaConciliacionImporteDto) {
+  facturaParaBusquedaManual.value = {
+    tipo: 'PROVEEDOR',
+    id: item.facturaId,
+    numero: item.facturaNumero,
+    tercero: item.proveedorNombre,
+    fecha: item.facturaFecha,
+    importe: item.importeTotal,
+    conciliada: !item.libreParaConciliacion,
+    movimientoIds: [],
+  }
+  busquedaManualDialog.value = true
+}
+
+async function alConciliarManual() {
+  busquedaManualDialog.value = false
+  showMsg('Conciliación completada')
+  await cargar()
+}
+
+const conciliacionApi = useConciliacion()
+
+async function descartarSeleccionMovimientos(facturaId: number) {
+  const pares = [...movimientosSeleccionados(facturaId)].map(movimientoId => ({ facturaId, movimientoId }))
+
+  if (!pares.length)
+    return
+  actionLoading.value = true
+  try {
+    await conciliacionApi.descartarLote({ tipoFactura: 'PROVEEDOR', pares })
+    showMsg('Sugerencias descartadas')
+    await cargar()
+  }
+  catch (e: any) {
+    showMsg(e?.data?.message || 'No se pudieron descartar las sugerencias seleccionadas', 'error')
+  }
+  finally {
+    actionLoading.value = false
+  }
+}
+
 const movimientosRepetidosSeleccionados = computed(() => {
   const selecciones = new Map<number, Set<number>>()
   for (const facturaId of facturaIdsAConciliar.value) {
     for (const movimientoId of selectedMovimientosPorFactura.value[facturaId] ?? []) {
       const facturaIds = selecciones.get(movimientoId) ?? new Set<number>()
+
       facturaIds.add(facturaId)
       selecciones.set(movimientoId, facturaIds)
     }
   }
+
   return [...selecciones.entries()]
     .filter(([, facturaIds]) => facturaIds.size > 1)
     .map(([movimientoId, facturaIds]) => ({ movimientoId, facturas: facturaIds.size }))
@@ -162,6 +260,7 @@ function movimientoSeleccionadoEnVariasFacturas(movimientoId: number) {
 
 function toggleMovimiento(facturaId: number, movimientoId: number, checked: boolean) {
   const next = new Set(selectedMovimientosPorFactura.value[facturaId] ?? [])
+
   checked ? next.add(movimientoId) : next.delete(movimientoId)
   selectedMovimientosPorFactura.value = { ...selectedMovimientosPorFactura.value, [facturaId]: [...next] }
 }
@@ -195,10 +294,12 @@ async function conciliar() {
       const movimientoIds = selectedMovimientosPorFactura.value[facturaId] ?? []
       if (!movimientoIds.length)
         continue
+
       const res = await $api<{ ok: boolean; mensaje: string }>(`/facturas/conciliacion-extracto-por-importe/conciliar-seleccion?${criteriosQuery()}`, {
         method: 'POST',
         body: { facturaIds: [facturaId], movimientoIds },
       })
+
       mensaje = res.mensaje
     }
 
@@ -217,7 +318,6 @@ async function conciliar() {
 
 const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '-'
 const formatMoney = (n?: number) => n == null ? '-' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`
-const confidenceColor = (confidence?: string) => confidence === 'alta' ? 'success' : confidence === 'media' ? 'warning' : 'secondary'
 
 onMounted(cargar)
 </script>
@@ -233,35 +333,76 @@ onMounted(cargar)
           Busca movimientos desde las facturas usando modo automático o criterios personalizados.
         </div>
       </div>
-      <VBtn
-        variant="tonal"
-        :loading="loading"
-        @click="cargar"
-      >
-        Actualizar
-      </VBtn>
+      <div class="d-flex gap-2">
+        <EnlaceAltaManualFactura />
+        <VBtn
+          variant="tonal"
+          :loading="loading"
+          @click="cargar"
+        >
+          Actualizar
+        </VBtn>
+      </div>
     </VCardText>
   </VCard>
 
-  <VCard variant="tonal" class="mb-4">
+  <VCard
+    variant="tonal"
+    class="mb-4"
+  >
     <VCardText>
       <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
         <div>
-          <div class="text-subtitle-1">Criterios de búsqueda</div>
+          <div class="text-subtitle-1">
+            Criterios de búsqueda
+          </div>
           <div class="text-body-2 text-disabled">
             Automático: concepto aprendido + importe con diferencia máxima del 1%; la fecha ordena los movimientos.
           </div>
         </div>
-        <VBtnToggle v-model="automatico" mandatory color="primary" density="compact">
-          <VBtn :value="true">Automático</VBtn>
-          <VBtn :value="false">Personalizado</VBtn>
+        <VBtnToggle
+          v-model="automatico"
+          mandatory
+          color="primary"
+          density="compact"
+        >
+          <VBtn value>
+            Automático
+          </VBtn>
+          <VBtn :value="false">
+            Personalizado
+          </VBtn>
         </VBtnToggle>
       </div>
-      <div class="d-flex flex-wrap align-center gap-4">
-        <VSwitch v-model="usarFecha" label="Mismo día" :disabled="automatico" hide-details density="compact" />
-        <VSwitch v-model="usarImporte" label="Importe (tolerancia 1%)" :disabled="automatico" hide-details density="compact" />
-        <VSwitch v-model="usarConceptos" label="Conceptos aprendidos" :disabled="automatico" hide-details density="compact" />
-        <VBtn variant="tonal" :loading="loading" @click="cargar">Aplicar criterios</VBtn>
+      <div class="d-flex flex-wrap align-center gap-4 mb-3">
+        <VSwitch
+          v-model="usarFecha"
+          label="Mismo día"
+          :disabled="automatico"
+          hide-details
+          density="compact"
+        />
+        <VSwitch
+          v-model="usarImporte"
+          label="Importe (tolerancia 1%)"
+          :disabled="automatico"
+          hide-details
+          density="compact"
+        />
+        <VSwitch
+          v-model="usarConceptos"
+          label="Conceptos aprendidos"
+          :disabled="automatico"
+          hide-details
+          density="compact"
+        />
+        <VBtn
+          variant="tonal"
+          :loading="loading"
+          @click="cargarDesdePagina1"
+        >
+          Aplicar criterios
+        </VBtn>
         <VBtn
           :color="soloConflictos ? 'warning' : undefined"
           :variant="soloConflictos ? 'flat' : 'tonal'"
@@ -270,10 +411,18 @@ onMounted(cargar)
         >
           {{ soloConflictos ? 'Ver todos' : `Ver solo conflictos (${movimientosRepetidosEnSeleccionActual})` }}
         </VBtn>
-        <VBtn color="primary" :disabled="!facturaIdsSeleccionadas.length" @click="abrirConciliacionSeleccionadas">
+        <VBtn
+          color="primary"
+          :disabled="!facturaIdsSeleccionadas.length"
+          @click="abrirConciliacionSeleccionadas"
+        >
           Conciliar todos los seleccionados ({{ movimientosSeleccionadosCount }})
         </VBtn>
       </div>
+      <FiltrosBusquedaConciliacion
+        v-model="filtros"
+        @update:model-value="cargarDesdePagina1"
+      />
     </VCardText>
   </VCard>
 
@@ -314,7 +463,11 @@ onMounted(cargar)
                   :loading="pdfLoadingId === item.facturaId"
                   @click="verPdf(item.facturaId)"
                 >
-                  <VIcon icon="tabler-file-type-pdf" color="error" size="20" />
+                  <VIcon
+                    icon="tabler-file-type-pdf"
+                    color="error"
+                    size="20"
+                  />
                 </IconBtn>
               </div>
               <div class="text-body-2 text-disabled">
@@ -346,7 +499,8 @@ onMounted(cargar)
                 <th class="text-right">
                   Importe
                 </th>
-                <th>Score</th>
+                <th>Coincidencia</th>
+                <th />
                 <th />
               </tr>
             </thead>
@@ -380,28 +534,19 @@ onMounted(cargar)
                   {{ formatMoney(mov.importe) }}
                 </td>
                 <td>
-                  <div class="d-flex flex-column ga-1 py-1">
-                    <div class="d-flex align-center ga-2">
-                      <VChip
-                        size="x-small"
-                        :color="confidenceColor(mov.confidence)"
-                        variant="tonal"
-                      >
-                        {{ mov.confidence || 'baja' }}
-                      </VChip>
-                      <span class="text-caption">score {{ mov.score }}</span>
-                    </div>
-                    <div class="d-flex flex-wrap ga-1">
-                      <VChip
-                        v-for="reason in mov.reasons"
-                        :key="reason"
-                        size="x-small"
-                        variant="outlined"
-                      >
-                        {{ reason }}
-                      </VChip>
-                    </div>
-                  </div>
+                  <BadgeCoincidenciaConciliacion
+                    :nivel="(mov.confidence as 'alta' | 'media' | 'baja') || 'baja'"
+                    :motivos="mov.reasons"
+                    :score="mov.score"
+                  />
+                </td>
+                <td>
+                  <BotonDescartarSugerencia
+                    tipo-factura="PROVEEDOR"
+                    :factura-id="item.facturaId"
+                    :movimiento-id="mov.movimientoId"
+                    @descartado="cargar"
+                  />
                 </td>
                 <td class="text-right">
                   <VCheckboxBtn
@@ -414,7 +559,24 @@ onMounted(cargar)
             </tbody>
           </VTable>
 
-          <div class="d-flex justify-end mt-3">
+          <div class="d-flex justify-end gap-2 mt-3">
+            <VBtn
+              size="small"
+              variant="text"
+              @click="abrirBusquedaManual(item)"
+            >
+              Buscar manualmente
+            </VBtn>
+            <VBtn
+              size="small"
+              variant="text"
+              color="secondary"
+              :disabled="!movimientosSeleccionados(item.facturaId).size"
+              :loading="actionLoading"
+              @click="descartarSeleccionMovimientos(item.facturaId)"
+            >
+              Descartar seleccionados
+            </VBtn>
             <VBtn
               size="small"
               variant="text"
@@ -429,6 +591,29 @@ onMounted(cargar)
       </VCard>
     </VCol>
   </VRow>
+
+  <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-4">
+    <div class="d-flex align-center gap-2">
+      <span class="text-disabled text-body-2">Por página:</span>
+      <AppSelect
+        v-model="itemsPerPage"
+        :items="itemsPerPageOptions"
+        density="compact"
+        style="width: 90px;"
+        @update:model-value="cargarDesdePagina1"
+      />
+      <span class="text-disabled text-body-2">{{ totalItems }} facturas en total</span>
+    </div>
+    <VPagination
+      v-if="totalItems > itemsPerPage"
+      v-model="page"
+      active-color="primary"
+      density="compact"
+      :length="Math.ceil(totalItems / itemsPerPage)"
+      :total-visible="5"
+      @update:model-value="cargar"
+    />
+  </div>
 
   <VDialog
     v-model="confirmDialog"
@@ -483,15 +668,50 @@ onMounted(cargar)
   >
     <VCard>
       <VCardTitle class="d-flex align-center pa-3">
-        <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+        <VIcon
+          icon="tabler-file-type-pdf"
+          color="error"
+          class="me-2"
+        />
         Documento
         <VSpacer />
         <IconBtn @click="pdfDialogOpen = false">
           <VIcon icon="tabler-x" />
         </IconBtn>
       </VCardTitle>
-      <VCardText class="pa-0" style="height: 80vh;">
-        <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
+      <VCardText
+        class="pa-0"
+        style="height: 80vh;"
+      >
+        <iframe
+          v-if="pdfUrl"
+          :src="pdfUrl"
+          style="width:100%;height:100%;border:none;"
+        />
+      </VCardText>
+    </VCard>
+  </VDialog>
+
+  <VDialog
+    v-model="busquedaManualDialog"
+    max-width="900"
+    scrollable
+  >
+    <VCard v-if="facturaParaBusquedaManual">
+      <VCardTitle class="d-flex align-center">
+        Buscar movimientos para {{ facturaParaBusquedaManual.numero || `Factura #${facturaParaBusquedaManual.id}` }}
+        <VSpacer />
+        <IconBtn @click="busquedaManualDialog = false">
+          <VIcon icon="tabler-x" />
+        </IconBtn>
+      </VCardTitle>
+      <VCardText>
+        <PanelBusquedaManualConciliacion
+          tipo-factura="PROVEEDOR"
+          modo="factura"
+          :elemento="facturaParaBusquedaManual"
+          @conciliado="alConciliarManual"
+        />
       </VCardText>
     </VCard>
   </VDialog>

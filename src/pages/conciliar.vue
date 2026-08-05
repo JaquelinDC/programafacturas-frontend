@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useConciliacion } from '@/composables/useConciliacion'
+import PanelBusquedaManualConciliacion from '@/components/conciliacion/PanelBusquedaManualConciliacion.vue'
+import FiltrosBusquedaConciliacion from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import type { FiltrosConciliacion } from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import EnlaceAltaManualFactura from '@/components/conciliacion/EnlaceAltaManualFactura.vue'
 import type {
-  ConciliacionCandidatoFacturaDto,
-  ConciliacionCandidatoMovimientoDto,
   ConciliacionFacturaDto,
   ConciliacionMovimientoDto,
   ConciliacionResumenDto,
@@ -25,23 +27,32 @@ const facturas = ref<ConciliacionFacturaDto[]>([])
 const movimientos = ref<ConciliacionMovimientoDto[]>([])
 const facturaActiva = ref<ConciliacionFacturaDto>()
 const movimientoActivo = ref<ConciliacionMovimientoDto>()
-const candidatosMov = ref<ConciliacionCandidatoMovimientoDto[]>([])
-const candidatosFac = ref<ConciliacionCandidatoFacturaDto[]>([])
-const seleccionMov = ref<number[]>([])
-const seleccionFac = ref<number[]>([])
 const qFacturas = ref('')
 const qMovimientos = ref('')
-const qCandidatos = ref('')
+const filtrosFacturas = ref<FiltrosConciliacion>({})
+const filtrosMovimientos = ref<FiltrosConciliacion>({})
 const incluirFacturas = ref(false)
 const incluirMovimientos = ref(false)
 const loading = ref(false)
 const actionLoading = ref(false)
 const error = ref('')
 const mensaje = ref('')
-const busquedaDialog = ref(false)
-const confirmDialog = ref(false)
-const confirmacionManual = ref(false)
-const avisos = ref<string[]>([])
+const cajaDialog = ref(false)
+const cajaComentario = ref('')
+
+const pageFacturas = ref(1)
+const itemsPerPageFacturas = ref(20)
+const totalItemsFacturas = ref(0)
+const pageMovimientos = ref(1)
+const itemsPerPageMovimientos = ref(20)
+const totalItemsMovimientos = ref(0)
+
+const itemsPerPageOptions = [
+  { title: '10', value: 10 },
+  { title: '20', value: 20 },
+  { title: '50', value: 50 },
+  { title: '100', value: 100 },
+]
 
 const tipoItems = [
   { title: 'Facturas de proveedor', value: 'PROVEEDOR' },
@@ -69,6 +80,10 @@ function getError(err: any, fallback: string) {
   return err?.data?.message || err?.message || fallback
 }
 
+const puedeMarcarCaja = computed(() =>
+  tab.value === 'factura' && tipo.value === 'PROVEEDOR' && facturaActiva.value && !facturaActiva.value.conciliada,
+)
+
 async function cargarResumen() {
   resumen.value = await api.resumen()
 }
@@ -77,9 +92,14 @@ async function buscarFacturas() {
   loading.value = true
   error.value = ''
   try {
-    const response = await api.buscarFacturas(tipo.value, { q: qFacturas.value, size: 100 }, incluirFacturas.value)
+    const response = await api.buscarFacturas(
+      tipo.value,
+      { q: qFacturas.value, ...filtrosFacturas.value, page: pageFacturas.value - 1, size: itemsPerPageFacturas.value },
+      incluirFacturas.value,
+    )
 
     facturas.value = response.content
+    totalItemsFacturas.value = response.totalElements
   }
   catch (err: any) {
     error.value = getError(err, 'No se pudieron buscar las facturas.')
@@ -93,9 +113,13 @@ async function buscarMovimientos() {
   loading.value = true
   error.value = ''
   try {
-    const response = await api.buscarMovimientos({ q: qMovimientos.value, size: 100 }, incluirMovimientos.value)
+    const response = await api.buscarMovimientos(
+      { q: qMovimientos.value, ...filtrosMovimientos.value, page: pageMovimientos.value - 1, size: itemsPerPageMovimientos.value },
+      incluirMovimientos.value,
+    )
 
     movimientos.value = response.content
+    totalItemsMovimientos.value = response.totalElements
   }
   catch (err: any) {
     error.value = getError(err, 'No se pudieron buscar los movimientos.')
@@ -105,137 +129,39 @@ async function buscarMovimientos() {
   }
 }
 
-async function elegirFactura(item: ConciliacionFacturaDto) {
+function buscarFacturasDesdePagina1() {
+  pageFacturas.value = 1
+
+  return buscarFacturas()
+}
+
+function buscarMovimientosDesdePagina1() {
+  pageMovimientos.value = 1
+
+  return buscarMovimientos()
+}
+
+function elegirFactura(item: ConciliacionFacturaDto) {
   facturaActiva.value = item
   movimientoActivo.value = undefined
-  qCandidatos.value = ''
-  seleccionMov.value = []
-  await abrirBusquedaManual()
 }
 
-async function elegirMovimiento(item: ConciliacionMovimientoDto) {
+function elegirMovimiento(item: ConciliacionMovimientoDto) {
   movimientoActivo.value = item
   facturaActiva.value = undefined
-  qCandidatos.value = ''
-  seleccionFac.value = []
-  await abrirBusquedaManual()
-}
-
-async function abrirBusquedaManual() {
-  qCandidatos.value = ''
-  busquedaDialog.value = true
-  if (tab.value === 'factura')
-    await buscarCandidatosMovimiento()
-  else
-    await buscarCandidatosFactura()
-}
-
-async function buscarCandidatosMovimiento() {
-  if (!facturaActiva.value)
-    return
-  loading.value = true
-  error.value = ''
-  try {
-    const response = await api.candidatosMovimientos(
-      tipo.value,
-      facturaActiva.value.id,
-      { q: qCandidatos.value, size: 100 },
-    )
-
-    candidatosMov.value = response.content
-  }
-  catch (err: any) {
-    error.value = getError(err, 'No se pudieron buscar movimientos candidatos.')
-  }
-  finally {
-    loading.value = false
-  }
-}
-
-async function buscarCandidatosFactura() {
-  if (!movimientoActivo.value)
-    return
-  loading.value = true
-  error.value = ''
-  try {
-    const response = await api.candidatosFacturas(
-      movimientoActivo.value.id,
-      tipo.value,
-      { q: qCandidatos.value, size: 100 },
-    )
-
-    candidatosFac.value = response.content
-  }
-  catch (err: any) {
-    error.value = getError(err, 'No se pudieron buscar facturas candidatas.')
-  }
-  finally {
-    loading.value = false
-  }
-}
-
-function toggleMovimiento(id: number, checked: boolean) {
-  if (tipo.value === 'EMITIDA') {
-    seleccionMov.value = checked ? [id] : []
-
-    return
-  }
-  const next = new Set(seleccionMov.value)
-
-  checked ? next.add(id) : next.delete(id)
-  seleccionMov.value = [...next]
-}
-
-function toggleFactura(id: number, checked: boolean) {
-  const next = new Set(seleccionFac.value)
-
-  checked ? next.add(id) : next.delete(id)
-  seleccionFac.value = [...next]
-}
-
-function prepararConfirmacion() {
-  const coincidencias = tab.value === 'factura'
-    ? candidatosMov.value.filter(item => seleccionMov.value.includes(item.movimiento.id)).map(item => item.coincidencia)
-    : candidatosFac.value.filter(item => seleccionFac.value.includes(item.factura.id)).map(item => item.coincidencia)
-
-  confirmacionManual.value = coincidencias.some(item => item.requiereConfirmacion)
-  avisos.value = [...new Set(coincidencias.flatMap(item => item.avisos))]
-  confirmDialog.value = true
 }
 
 async function refrescarTodo() {
   await Promise.all([cargarResumen(), buscarFacturas(), buscarMovimientos()])
-  if (tab.value === 'factura')
-    await buscarCandidatosMovimiento()
-  else await buscarCandidatosFactura()
 }
 
-async function conciliar() {
-  actionLoading.value = true
-  error.value = ''
-  mensaje.value = ''
-  try {
-    const response = await api.enlazar({
-      tipoFactura: tipo.value,
-      facturaIds: tab.value === 'factura' ? [facturaActiva.value!.id] : seleccionFac.value,
-      movimientoIds: tab.value === 'movimiento' ? [movimientoActivo.value!.id] : seleccionMov.value,
-      confirmarManual: confirmacionManual.value,
-    })
-
-    mensaje.value = response.mensaje
-    seleccionMov.value = []
-    seleccionFac.value = []
-    confirmDialog.value = false
-    busquedaDialog.value = false
-    await refrescarTodo()
-  }
-  catch (err: any) {
-    error.value = getError(err, 'No se pudo completar la conciliación.')
-    confirmDialog.value = false
-  }
-  finally {
-    actionLoading.value = false
-  }
+async function alConciliar() {
+  mensaje.value = 'Conciliación completada.'
+  await refrescarTodo()
+  if (facturaActiva.value)
+    facturaActiva.value = facturas.value.find(item => item.id === facturaActiva.value?.id)
+  if (movimientoActivo.value)
+    movimientoActivo.value = movimientos.value.find(item => item.id === movimientoActivo.value?.id)
 }
 
 async function desconciliar(tipoFactura: TipoFacturaConciliacion, facturaId: number, movimientoId: number) {
@@ -259,12 +185,35 @@ async function desconciliar(tipoFactura: TipoFacturaConciliacion, facturaId: num
   }
 }
 
+function abrirCaja() {
+  cajaComentario.value = ''
+  cajaDialog.value = true
+}
+
+async function marcarCaja() {
+  if (!facturaActiva.value)
+    return
+  actionLoading.value = true
+  error.value = ''
+  try {
+    await api.marcarCaja(facturaActiva.value.id, cajaComentario.value || undefined)
+    mensaje.value = 'Factura marcada como pagada en caja.'
+    cajaDialog.value = false
+    await refrescarTodo()
+    facturaActiva.value = undefined
+  }
+  catch (err: any) {
+    error.value = getError(err, 'No se pudo marcar la factura a caja.')
+  }
+  finally {
+    actionLoading.value = false
+  }
+}
+
 watch(tipo, async () => {
   facturaActiva.value = undefined
   movimientoActivo.value = undefined
-  candidatosMov.value = []
-  candidatosFac.value = []
-  await buscarFacturas()
+  await buscarFacturasDesdePagina1()
 })
 
 onMounted(refrescarTodo)
@@ -346,6 +295,8 @@ onMounted(refrescarTodo)
         >
           Conceptos no conciliables
         </VBtn>
+        <VSpacer />
+        <EnlaceAltaManualFactura />
       </VCardText>
     </VCard>
 
@@ -411,21 +362,27 @@ onMounted(refrescarTodo)
                   v-model="qFacturas"
                   label="Número, tercero, importe o ID"
                   clearable
-                  @keyup.enter="buscarFacturas"
+                  @keyup.enter="buscarFacturasDesdePagina1"
                 />
                 <VBtn
                   icon="tabler-search"
                   :loading="loading"
-                  @click="buscarFacturas"
+                  @click="buscarFacturasDesdePagina1"
                 />
               </div>
+              <FiltrosBusquedaConciliacion
+                v-model="filtrosFacturas"
+                :mostrar-proveedor="tipo === 'PROVEEDOR'"
+                class="mb-2"
+                @update:model-value="buscarFacturasDesdePagina1"
+              />
               <VSwitch
                 v-model="incluirFacturas"
                 label="Incluir conciliadas"
                 density="compact"
                 hide-details
                 class="mb-3"
-                @update:model-value="buscarFacturas"
+                @update:model-value="buscarFacturasDesdePagina1"
               />
               <VList
                 lines="two"
@@ -440,22 +397,13 @@ onMounted(refrescarTodo)
                   <VListItemTitle>{{ factura.numero || `Factura #${factura.id}` }} · {{ formatMoney(factura.importe) }}</VListItemTitle>
                   <VListItemSubtitle>{{ factura.tercero || 'Sin tercero' }} · {{ formatDate(factura.fecha) }}</VListItemSubtitle>
                   <template #append>
-                    <div class="d-flex align-center gap-2">
-                      <VChip
-                        size="x-small"
-                        :color="colorEstado(factura.estado)"
-                        variant="tonal"
-                      >
-                        {{ factura.estado }}
-                      </VChip>
-                      <IconBtn
-                        title="Buscar movimientos para esta factura"
-                        aria-label="Buscar movimientos para esta factura"
-                        @click.stop="elegirFactura(factura)"
-                      >
-                        <VIcon icon="tabler-search" />
-                      </IconBtn>
-                    </div>
+                    <VChip
+                      size="x-small"
+                      :color="colorEstado(factura.estado)"
+                      variant="tonal"
+                    >
+                      {{ factura.estado }}
+                    </VChip>
                   </template>
                 </VListItem>
                 <VListItem v-if="!facturas.length">
@@ -464,6 +412,27 @@ onMounted(refrescarTodo)
                   </VListItemTitle>
                 </VListItem>
               </VList>
+              <div class="d-flex align-center justify-space-between flex-wrap gap-2 mt-2">
+                <div class="d-flex align-center gap-2">
+                  <span class="text-disabled text-body-2">Por página:</span>
+                  <AppSelect
+                    v-model="itemsPerPageFacturas"
+                    :items="itemsPerPageOptions"
+                    density="compact"
+                    style="width: 90px;"
+                    @update:model-value="buscarFacturasDesdePagina1"
+                  />
+                </div>
+                <VPagination
+                  v-if="totalItemsFacturas > itemsPerPageFacturas"
+                  v-model="pageFacturas"
+                  active-color="primary"
+                  density="compact"
+                  :length="Math.ceil(totalItemsFacturas / itemsPerPageFacturas)"
+                  :total-visible="5"
+                  @update:model-value="buscarFacturas"
+                />
+              </div>
             </template>
             <template v-else>
               <div class="d-flex gap-2 mb-2">
@@ -471,21 +440,27 @@ onMounted(refrescarTodo)
                   v-model="qMovimientos"
                   label="ID, concepto, banco o importe"
                   clearable
-                  @keyup.enter="buscarMovimientos"
+                  @keyup.enter="buscarMovimientosDesdePagina1"
                 />
                 <VBtn
                   icon="tabler-search"
                   :loading="loading"
-                  @click="buscarMovimientos"
+                  @click="buscarMovimientosDesdePagina1"
                 />
               </div>
+              <FiltrosBusquedaConciliacion
+                v-model="filtrosMovimientos"
+                :mostrar-proveedor="false"
+                class="mb-2"
+                @update:model-value="buscarMovimientosDesdePagina1"
+              />
               <VSwitch
                 v-model="incluirMovimientos"
                 label="Incluir conciliados"
                 density="compact"
                 hide-details
                 class="mb-3"
-                @update:model-value="buscarMovimientos"
+                @update:model-value="buscarMovimientosDesdePagina1"
               />
               <VList
                 lines="three"
@@ -501,22 +476,13 @@ onMounted(refrescarTodo)
                   <VListItemSubtitle>{{ movimiento.concepto || 'Sin concepto' }}</VListItemSubtitle>
                   <VListItemSubtitle>{{ movimiento.banco }} · {{ formatDate(movimiento.fecha) }}</VListItemSubtitle>
                   <template #append>
-                    <div class="d-flex align-center gap-2">
-                      <VChip
-                        size="x-small"
-                        :color="colorEstado(movimiento.estado)"
-                        variant="tonal"
-                      >
-                        {{ movimiento.estado }}
-                      </VChip>
-                      <IconBtn
-                        title="Buscar facturas para este movimiento"
-                        aria-label="Buscar facturas para este movimiento"
-                        @click.stop="elegirMovimiento(movimiento)"
-                      >
-                        <VIcon icon="tabler-search" />
-                      </IconBtn>
-                    </div>
+                    <VChip
+                      size="x-small"
+                      :color="colorEstado(movimiento.estado)"
+                      variant="tonal"
+                    >
+                      {{ movimiento.estado }}
+                    </VChip>
                   </template>
                 </VListItem>
                 <VListItem v-if="!movimientos.length">
@@ -525,6 +491,27 @@ onMounted(refrescarTodo)
                   </VListItemTitle>
                 </VListItem>
               </VList>
+              <div class="d-flex align-center justify-space-between flex-wrap gap-2 mt-2">
+                <div class="d-flex align-center gap-2">
+                  <span class="text-disabled text-body-2">Por página:</span>
+                  <AppSelect
+                    v-model="itemsPerPageMovimientos"
+                    :items="itemsPerPageOptions"
+                    density="compact"
+                    style="width: 90px;"
+                    @update:model-value="buscarMovimientosDesdePagina1"
+                  />
+                </div>
+                <VPagination
+                  v-if="totalItemsMovimientos > itemsPerPageMovimientos"
+                  v-model="pageMovimientos"
+                  active-color="primary"
+                  density="compact"
+                  :length="Math.ceil(totalItemsMovimientos / itemsPerPageMovimientos)"
+                  :total-visible="5"
+                  @update:model-value="buscarMovimientos"
+                />
+              </div>
             </template>
           </VCol>
 
@@ -547,7 +534,7 @@ onMounted(refrescarTodo)
               Selecciona un movimiento para buscar sus facturas.
             </VAlert>
             <template v-else>
-              <div class="d-flex justify-space-between align-center gap-3 mb-3">
+              <div class="d-flex justify-space-between align-center flex-wrap gap-3 mb-3">
                 <div>
                   <div class="text-subtitle-1 font-weight-medium">
                     Elemento seleccionado
@@ -559,11 +546,13 @@ onMounted(refrescarTodo)
                   </div>
                 </div>
                 <VBtn
-                  color="primary"
-                  prepend-icon="tabler-search"
-                  @click="abrirBusquedaManual"
+                  v-if="puedeMarcarCaja"
+                  color="secondary"
+                  variant="tonal"
+                  prepend-icon="tabler-cash"
+                  @click="abrirCaja"
                 >
-                  Buscar manualmente
+                  A caja
                 </VBtn>
               </div>
               <VDivider class="my-4" />
@@ -572,7 +561,7 @@ onMounted(refrescarTodo)
               </div>
               <div
                 v-if="facturaActiva?.movimientoIds.length"
-                class="d-flex flex-wrap gap-2"
+                class="d-flex flex-wrap gap-2 mb-4"
               >
                 <VChip
                   v-for="movimientoId in facturaActiva.movimientoIds"
@@ -587,7 +576,7 @@ onMounted(refrescarTodo)
               </div>
               <div
                 v-else-if="movimientoActivo?.facturas.length"
-                class="d-flex flex-wrap gap-2"
+                class="d-flex flex-wrap gap-2 mb-4"
               >
                 <VChip
                   v-for="factura in movimientoActivo.facturas"
@@ -602,10 +591,21 @@ onMounted(refrescarTodo)
               </div>
               <div
                 v-else
-                class="text-body-2 text-disabled"
+                class="text-body-2 text-disabled mb-4"
               >
                 Sin relaciones actuales.
               </div>
+
+              <VDivider class="mb-4" />
+              <div class="text-subtitle-2 mb-2">
+                Buscar y vincular manualmente
+              </div>
+              <PanelBusquedaManualConciliacion
+                :tipo-factura="tipo"
+                :modo="tab"
+                :elemento="tab === 'factura' ? facturaActiva : movimientoActivo"
+                @conciliado="alConciliar"
+              />
             </template>
           </VCol>
         </VRow>
@@ -613,198 +613,35 @@ onMounted(refrescarTodo)
     </VCard>
 
     <VDialog
-      v-model="busquedaDialog"
-      max-width="1000"
-      scrollable
+      v-model="cajaDialog"
+      max-width="480"
     >
       <VCard>
-        <VCardTitle class="d-flex align-center">
-          Buscar {{ tab === 'factura' ? 'movimientos para la factura' : 'facturas para el movimiento' }}
-          <VSpacer />
-          <IconBtn @click="busquedaDialog = false">
-            <VIcon icon="tabler-x" />
-          </IconBtn>
-        </VCardTitle>
-        <VCardSubtitle>
-          {{ tab === 'factura'
-            ? `${facturaActiva?.numero || `Factura #${facturaActiva?.id}`} · ${formatMoney(facturaActiva?.importe)}`
-            : `Movimiento #${movimientoActivo?.id} · ${formatMoney(movimientoActivo?.importe)}` }}
-        </VCardSubtitle>
+        <VCardTitle>Marcar factura a caja</VCardTitle>
         <VCardText>
-          <div class="d-flex gap-2 mb-4">
-            <AppTextField
-              v-model="qCandidatos"
-              :label="tab === 'factura' ? 'ID, concepto, banco, extracto o importe' : 'Número, tercero, CIF, referencia, importe o ID'"
-              clearable
-              @keyup.enter="tab === 'factura' ? buscarCandidatosMovimiento() : buscarCandidatosFactura()"
-            />
-            <VBtn
-              variant="tonal"
-              prepend-icon="tabler-search"
-              :loading="loading"
-              @click="tab === 'factura' ? buscarCandidatosMovimiento() : buscarCandidatosFactura()"
-            >
-              Buscar
-            </VBtn>
-          </div>
-
-          <VProgressLinear
-            v-if="loading"
-            indeterminate
-            class="mb-3"
+          <p class="text-body-2 mb-3">
+            La factura se marcará como pagada con el tipo de pago "Caja / otros", sin vincularla a ningún movimiento bancario.
+          </p>
+          <AppTextarea
+            v-model="cajaComentario"
+            label="Comentario (opcional)"
+            rows="3"
           />
-
-          <template v-if="tab === 'factura'">
-            <VCard
-              v-for="item in candidatosMov"
-              :key="item.movimiento.id"
-              variant="outlined"
-              class="mb-2"
-            >
-              <VCardText class="d-flex gap-3">
-                <VCheckboxBtn
-                  :model-value="seleccionMov.includes(item.movimiento.id)"
-                  @update:model-value="toggleMovimiento(item.movimiento.id, Boolean($event))"
-                />
-                <div class="flex-grow-1">
-                  <div class="d-flex justify-space-between gap-2">
-                    <div><strong>Mov. #{{ item.movimiento.id }}</strong> · {{ item.movimiento.concepto || 'Sin concepto' }}</div>
-                    <strong>{{ formatMoney(item.movimiento.importe) }}</strong>
-                  </div>
-                  <div class="text-caption text-disabled">
-                    {{ item.movimiento.banco }} · {{ formatDate(item.movimiento.fecha) }} · Extracto #{{ item.movimiento.extractoId }}
-                  </div>
-                  <div
-                    v-if="item.coincidencia.avisos.length"
-                    class="text-caption text-warning mt-1"
-                  >
-                    {{ item.coincidencia.avisos.join(' · ') }}
-                  </div>
-                  <VChip
-                    size="x-small"
-                    class="mt-1"
-                    :color="item.coincidencia.requiereConfirmacion ? 'warning' : 'success'"
-                    variant="tonal"
-                  >
-                    {{ item.coincidencia.requiereConfirmacion ? 'Requiere confirmación manual' : 'Coincidencia completa' }}
-                  </VChip>
-                </div>
-              </VCardText>
-            </VCard>
-            <div
-              v-if="!loading && !candidatosMov.length"
-              class="text-center text-disabled py-8"
-            >
-              No se encontraron movimientos.
-            </div>
-          </template>
-          <template v-else>
-            <VCard
-              v-for="item in candidatosFac"
-              :key="item.factura.id"
-              variant="outlined"
-              class="mb-2"
-            >
-              <VCardText class="d-flex gap-3">
-                <VCheckboxBtn
-                  :model-value="seleccionFac.includes(item.factura.id)"
-                  @update:model-value="toggleFactura(item.factura.id, Boolean($event))"
-                />
-                <div class="flex-grow-1">
-                  <div class="d-flex justify-space-between gap-2">
-                    <div><strong>{{ item.factura.numero || `Factura #${item.factura.id}` }}</strong> · {{ item.factura.tercero }}</div>
-                    <strong>{{ formatMoney(item.factura.importe) }}</strong>
-                  </div>
-                  <div class="text-caption text-disabled">
-                    {{ formatDate(item.factura.fecha) }} · {{ item.factura.estado }}
-                  </div>
-                  <div
-                    v-if="item.coincidencia.avisos.length"
-                    class="text-caption text-warning mt-1"
-                  >
-                    {{ item.coincidencia.avisos.join(' · ') }}
-                  </div>
-                  <VChip
-                    size="x-small"
-                    class="mt-1"
-                    :color="item.coincidencia.requiereConfirmacion ? 'warning' : 'success'"
-                    variant="tonal"
-                  >
-                    {{ item.coincidencia.requiereConfirmacion ? 'Requiere confirmación manual' : 'Coincidencia completa' }}
-                  </VChip>
-                </div>
-              </VCardText>
-            </VCard>
-            <div
-              v-if="!loading && !candidatosFac.length"
-              class="text-center text-disabled py-8"
-            >
-              No se encontraron facturas.
-            </div>
-          </template>
-        </VCardText>
-        <VCardActions>
-          <VBtn
-            variant="text"
-            @click="busquedaDialog = false"
-          >
-            Cerrar
-          </VBtn>
-          <VSpacer />
-          <VBtn
-            color="primary"
-            prepend-icon="tabler-link"
-            :disabled="tab === 'factura' ? !seleccionMov.length : !seleccionFac.length"
-            @click="prepararConfirmacion"
-          >
-            Conciliar seleccionados
-          </VBtn>
-        </VCardActions>
-      </VCard>
-    </VDialog>
-
-    <VDialog
-      v-model="confirmDialog"
-      max-width="620"
-    >
-      <VCard>
-        <VCardTitle>Confirmar conciliación</VCardTitle>
-        <VCardText>
-          Se crearán los vínculos seleccionados.
-          <VAlert
-            v-if="confirmacionManual"
-            type="warning"
-            variant="tonal"
-            class="mt-3"
-          >
-            <div class="font-weight-medium mb-2">
-              Hay diferencias que debes comprobar
-            </div>
-            <ul class="ps-5 mb-2">
-              <li
-                v-for="aviso in avisos"
-                :key="aviso"
-              >
-                {{ aviso }}
-              </li>
-            </ul>
-            La operación se guardará como conciliación manual forzada.
-          </VAlert>
         </VCardText>
         <VCardActions>
           <VSpacer />
           <VBtn
             variant="text"
-            @click="confirmDialog = false"
+            @click="cajaDialog = false"
           >
             Cancelar
           </VBtn>
           <VBtn
             color="primary"
             :loading="actionLoading"
-            @click="conciliar"
+            @click="marcarCaja"
           >
-            {{ confirmacionManual ? 'Forzar conciliación' : 'Conciliar' }}
+            Confirmar
           </VBtn>
         </VCardActions>
       </VCard>

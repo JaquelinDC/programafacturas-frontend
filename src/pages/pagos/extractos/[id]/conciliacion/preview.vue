@@ -1,6 +1,13 @@
 <script setup lang="ts">
-import type { ExtractoBancarioDto, ExtractoBancarioMovimientoDto, FacturaProveedorDto, FacturaProveedorResumenDto } from '@/types/api'
+import type { ConciliacionMovimientoDto, ExtractoBancarioDto, ExtractoBancarioMovimientoDto, FacturaProveedorDto, FacturaProveedorResumenDto, PageResponse } from '@/types/api'
 import { $api } from '@/utils/api'
+import { useConciliacion } from '@/composables/useConciliacion'
+import BadgeCoincidenciaConciliacion from '@/components/conciliacion/BadgeCoincidenciaConciliacion.vue'
+import BotonDescartarSugerencia from '@/components/conciliacion/BotonDescartarSugerencia.vue'
+import EnlaceAltaManualFactura from '@/components/conciliacion/EnlaceAltaManualFactura.vue'
+import FiltrosBusquedaConciliacion from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import type { FiltrosConciliacion } from '@/components/conciliacion/FiltrosBusquedaConciliacion.vue'
+import PanelBusquedaManualConciliacion from '@/components/conciliacion/PanelBusquedaManualConciliacion.vue'
 
 definePage({ meta: { title: 'Conciliar movimientos con facturas proveedor' } })
 
@@ -30,6 +37,19 @@ const automatico = ref(true)
 const usarFecha = ref(true)
 const usarImporte = ref(true)
 const usarConceptos = ref(true)
+const filtros = ref<FiltrosConciliacion>({})
+const busquedaManualDialog = ref(false)
+const movimientoParaBusquedaManual = ref<ConciliacionMovimientoDto>()
+
+const page = ref(1)
+const itemsPerPage = ref(20)
+const totalItems = ref(0)
+
+const itemsPerPageOptions = [
+  { title: '10', value: 10 },
+  { title: '20', value: 20 },
+  { title: '50', value: 50 },
+]
 
 const pdfDialogOpen = ref(false)
 const pdfUrl = ref('')
@@ -43,19 +63,24 @@ watch(pdfDialogOpen, open => {
 })
 
 async function verPdf(factura: FacturaProveedorDto) {
-  if (factura.id == null) return
+  if (factura.id == null)
+    return
   pdfLoadingId.value = factura.id
   try {
     const accessToken = useCookie('accessToken').value
     const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+
     const response = await fetch(`${baseUrl}/facturas/${factura.id}/pdf`, {
       headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
     })
+
     if (!response.ok) {
       error.value = 'No se pudo cargar el documento de la factura.'
+
       return
     }
     const blob = await response.blob()
+
     pdfUrl.value = URL.createObjectURL(blob)
     pdfDialogOpen.value = true
   }
@@ -81,7 +106,9 @@ function estaSeleccionada(movimientoId: number, facturaId: number) {
 function toggleSeleccion(movimientoId: number, facturaId: number, checked: boolean) {
   const value = clave(movimientoId, facturaId)
   if (checked) {
-    if (!seleccionadas.value.includes(value)) seleccionadas.value.push(value)
+    if (!seleccionadas.value.includes(value))
+      seleccionadas.value.push(value)
+
     return
   }
   seleccionadas.value = seleccionadas.value.filter(item => item !== value)
@@ -90,14 +117,9 @@ function toggleSeleccion(movimientoId: number, facturaId: number, checked: boole
 function seleccionarMejorPropuesta(itemsResp: ConciliacionProveedorPreviewItem[]) {
   seleccionadas.value = itemsResp.flatMap(item => {
     const mejor = item.candidatas[0]
+
     return mejor?.factura.id != null ? [clave(item.movimiento.id, mejor.factura.id)] : []
   })
-}
-
-function colorConfianza(confidence?: string) {
-  if (confidence === 'alta') return 'success'
-  if (confidence === 'media') return 'warning'
-  return 'secondary'
 }
 
 function criteriosQuery() {
@@ -110,28 +132,66 @@ function criteriosQuery() {
 }
 
 function facturasVinculadas(mov: ExtractoBancarioMovimientoDto): FacturaProveedorResumenDto[] {
-  if (mov.facturasProveedor?.length) return mov.facturasProveedor
-  if (mov.facturaProveedorId != null || mov.facturaProveedorNumero) {
+  if (mov.facturasProveedor?.length)
+    return mov.facturasProveedor
+  if (mov.facturaProveedorId != null || mov.facturaProveedorNumero)
     return [{ id: mov.facturaProveedorId, numeroFactura: mov.facturaProveedorNumero }]
-  }
+
   return []
+}
+
+function abrirBusquedaManual(item: ConciliacionProveedorPreviewItem) {
+  movimientoParaBusquedaManual.value = {
+    id: item.movimiento.id,
+    extractoId: item.movimiento.extractoBancarioId,
+    banco: extracto.value?.banco,
+    fecha: item.movimiento.fechaMovimiento,
+    concepto: item.movimiento.concepto,
+    observaciones: item.movimiento.observaciones,
+    importe: item.movimiento.importe,
+    estado: 'PENDIENTE',
+    facturas: [],
+  }
+  busquedaManualDialog.value = true
+}
+
+async function alConciliarManual() {
+  busquedaManualDialog.value = false
+  mensaje.value = 'Conciliación completada.'
+  await cargar()
 }
 
 async function cargar() {
   if (!automatico.value && !usarFecha.value && !usarImporte.value && !usarConceptos.value) {
     error.value = 'Selecciona al menos un criterio de conciliación.'
+
     return
   }
   cargando.value = true
   error.value = ''
   mensaje.value = ''
   try {
-    const [extractoResp, itemsResp] = await Promise.all([
+    const [extractoResp, response] = await Promise.all([
       $api<ExtractoBancarioDto>(`/extractos/${id.value}`),
-      $api<ConciliacionProveedorPreviewItem[]>(`/extractos/${id.value}/conciliacion/preview?${criteriosQuery()}`),
+      $api<PageResponse<ConciliacionProveedorPreviewItem>>(`/extractos/${id.value}/conciliacion/preview`, {
+        params: {
+          automatico: automatico.value,
+          usarFecha: usarFecha.value,
+          usarImporte: usarImporte.value,
+          usarConceptos: usarConceptos.value,
+          fechaDesde: filtros.value.fechaDesde || undefined,
+          fechaHasta: filtros.value.fechaHasta || undefined,
+          importe: filtros.value.importe ?? undefined,
+          proveedorId: filtros.value.proveedorId ?? undefined,
+          page: page.value - 1,
+          size: itemsPerPage.value,
+        },
+      }),
     ])
+
     extracto.value = extractoResp
-    const itemsOrdenados = itemsResp
+
+    const itemsOrdenados = response.content
       .map((item, ordenOriginal) => ({ item, ordenOriginal }))
       .sort((a, b) => {
         const aMultiple = a.item.candidatas.length > 1 ? 1 : 0
@@ -140,7 +200,9 @@ async function cargar() {
         return bMultiple - aMultiple || a.ordenOriginal - b.ordenOriginal
       })
       .map(({ item }) => item)
+
     items.value = itemsOrdenados
+    totalItems.value = response.totalElements
     seleccionarMejorPropuesta(itemsOrdenados)
   }
   catch (err: any) {
@@ -151,9 +213,16 @@ async function cargar() {
   }
 }
 
+function cargarDesdePagina1() {
+  page.value = 1
+
+  return cargar()
+}
+
 async function confirmarSeleccion(relaciones = seleccionadas.value) {
   if (!relaciones.length) {
     error.value = 'Selecciona al menos una relacion movimiento-factura.'
+
     return
   }
   guardando.value = true
@@ -164,6 +233,7 @@ async function confirmarSeleccion(relaciones = seleccionadas.value) {
       method: 'POST',
       body: relaciones,
     })
+
     mensaje.value = res?.mensaje || 'Conciliacion aplicada.'
     await cargar()
   }
@@ -183,6 +253,34 @@ async function conciliarMovimiento(movimientoId: number) {
   await confirmarSeleccion(seleccionesMovimiento(movimientoId))
 }
 
+const conciliacionApi = useConciliacion()
+
+async function descartarSeleccionMovimiento(movimientoId: number) {
+  const pares = seleccionesMovimiento(movimientoId).map(seleccion => {
+    const [, facturaIdRaw] = seleccion.split(':')
+
+    return { facturaId: Number(facturaIdRaw), movimientoId }
+  })
+
+  if (!pares.length)
+    return
+  guardando.value = true
+  error.value = ''
+  mensaje.value = ''
+  try {
+    await conciliacionApi.descartarLote({ tipoFactura: 'PROVEEDOR', pares })
+    seleccionadas.value = seleccionadas.value.filter(seleccion => !seleccion.startsWith(`${movimientoId}:`))
+    mensaje.value = 'Sugerencias descartadas.'
+    await cargar()
+  }
+  catch (err: any) {
+    error.value = err?.data?.message || err?.message || 'No se pudieron descartar las sugerencias seleccionadas.'
+  }
+  finally {
+    guardando.value = false
+  }
+}
+
 async function desconciliarUna(movimientoId: number, facturaId: number) {
   guardando.value = true
   error.value = ''
@@ -191,6 +289,7 @@ async function desconciliarUna(movimientoId: number, facturaId: number) {
     const res = await $api<{ mensaje?: string }>(`/extractos/${id.value}/movimientos/${movimientoId}/conciliacion?facturaId=${facturaId}`, {
       method: 'DELETE',
     })
+
     mensaje.value = res?.mensaje || 'Conciliacion revertida.'
     await cargar()
   }
@@ -212,8 +311,19 @@ onMounted(cargar)
       <VCardSubtitle>Candidatas encontradas para cada movimiento pendiente · {{ extracto?.banco ?? 'Extracto' }} #{{ id }}</VCardSubtitle>
       <template #append>
         <div class="d-flex gap-2">
-          <VBtn :to="`/extractos/${id}`" variant="tonal">Volver al extracto</VBtn>
-          <VBtn color="primary" :loading="guardando" :disabled="cargando || !seleccionadas.length" @click="confirmarSeleccion()">
+          <EnlaceAltaManualFactura />
+          <VBtn
+            :to="`/extractos/${id}`"
+            variant="tonal"
+          >
+            Volver al extracto
+          </VBtn>
+          <VBtn
+            color="primary"
+            :loading="guardando"
+            :disabled="cargando || !seleccionadas.length"
+            @click="confirmarSeleccion"
+          >
             Conciliar todos los seleccionados ({{ seleccionadas.length }})
           </VBtn>
         </div>
@@ -221,34 +331,86 @@ onMounted(cargar)
     </VCardItem>
 
     <VCardText>
-      <VCard variant="tonal" class="mb-4">
+      <VCard
+        variant="tonal"
+        class="mb-4"
+      >
         <VCardText>
           <div class="d-flex align-center justify-space-between flex-wrap gap-3 mb-3">
             <div>
-              <div class="text-subtitle-1">Criterios de búsqueda</div>
+              <div class="text-subtitle-1">
+                Criterios de búsqueda
+              </div>
               <div class="text-body-2 text-disabled">
                 Automático: concepto aprendido + importe con diferencia máxima del 1%; la fecha ordena las propuestas.
               </div>
             </div>
-            <VBtnToggle v-model="automatico" mandatory color="primary" density="compact">
-              <VBtn :value="true">Automático</VBtn>
-              <VBtn :value="false">Personalizado</VBtn>
+            <VBtnToggle
+              v-model="automatico"
+              mandatory
+              color="primary"
+              density="compact"
+            >
+              <VBtn value>
+                Automático
+              </VBtn>
+              <VBtn :value="false">
+                Personalizado
+              </VBtn>
             </VBtnToggle>
           </div>
-          <div class="d-flex flex-wrap align-center gap-4">
-            <VSwitch v-model="usarFecha" label="Mismo día" :disabled="automatico" hide-details density="compact" />
-            <VSwitch v-model="usarImporte" label="Importe (tolerancia 1%)" :disabled="automatico" hide-details density="compact" />
-            <VSwitch v-model="usarConceptos" label="Conceptos aprendidos" :disabled="automatico" hide-details density="compact" />
-            <VBtn variant="tonal" :loading="cargando" @click="cargar">Aplicar criterios</VBtn>
+          <div class="d-flex flex-wrap align-center gap-4 mb-3">
+            <VSwitch
+              v-model="usarFecha"
+              label="Mismo día"
+              :disabled="automatico"
+              hide-details
+              density="compact"
+            />
+            <VSwitch
+              v-model="usarImporte"
+              label="Importe (tolerancia 1%)"
+              :disabled="automatico"
+              hide-details
+              density="compact"
+            />
+            <VSwitch
+              v-model="usarConceptos"
+              label="Conceptos aprendidos"
+              :disabled="automatico"
+              hide-details
+              density="compact"
+            />
+            <VBtn
+              variant="tonal"
+              :loading="cargando"
+              @click="cargarDesdePagina1"
+            >
+              Aplicar criterios
+            </VBtn>
           </div>
+          <FiltrosBusquedaConciliacion
+            v-model="filtros"
+            @update:model-value="cargarDesdePagina1"
+          />
         </VCardText>
       </VCard>
 
-      <VAlert v-if="error" type="error" variant="tonal" class="mb-4">
+      <VAlert
+        v-if="error"
+        type="error"
+        variant="tonal"
+        class="mb-4"
+      >
         {{ error }}
       </VAlert>
 
-      <VAlert v-else-if="mensaje" type="success" variant="tonal" class="mb-4">
+      <VAlert
+        v-else-if="mensaje"
+        type="success"
+        variant="tonal"
+        class="mb-4"
+      >
         {{ mensaje }}
       </VAlert>
 
@@ -256,7 +418,11 @@ onMounted(cargar)
         Se propone una mejor sugerencia por movimiento y se mantienen candidatas de confianza media o baja para revision manual.
       </div>
 
-      <VProgressLinear v-if="cargando" indeterminate class="mb-4" />
+      <VProgressLinear
+        v-if="cargando"
+        indeterminate
+        class="mb-4"
+      />
 
       <VRow v-else>
         <VCol
@@ -274,7 +440,10 @@ onMounted(cargar)
                   <div class="text-body-2 text-disabled">
                     {{ formatDate(item.movimiento.fechaMovimiento) }} · Mov. #{{ item.movimiento.id }}
                   </div>
-                  <div v-if="facturasVinculadas(item.movimiento).length" class="d-flex flex-wrap align-center ga-2 mt-1">
+                  <div
+                    v-if="facturasVinculadas(item.movimiento).length"
+                    class="d-flex flex-wrap align-center ga-2 mt-1"
+                  >
                     <span class="text-caption text-success">Vinculadas:</span>
                     <VChip
                       v-for="facturaVinculada in facturasVinculadas(item.movimiento)"
@@ -291,10 +460,13 @@ onMounted(cargar)
                         variant="text"
                         color="success"
                         :loading="guardando"
-                        class="ml-1"
+                        class="ms-1"
                         @click.stop="desconciliarUna(item.movimiento.id, facturaVinculada.id)"
                       >
-                        <VIcon icon="tabler-x" size="14" />
+                        <VIcon
+                          icon="tabler-x"
+                          size="14"
+                        />
                       </VBtn>
                     </VChip>
                   </div>
@@ -313,7 +485,10 @@ onMounted(cargar)
                 </div>
               </div>
 
-              <VTable v-if="item.candidatas.length" density="compact">
+              <VTable
+                v-if="item.candidatas.length"
+                density="compact"
+              >
                 <thead>
                   <tr>
                     <th style="width: 40px;" />
@@ -322,10 +497,14 @@ onMounted(cargar)
                     <th style="width: 110px;">
                       Fecha
                     </th>
-                    <th class="text-right" style="width: 120px;">
+                    <th
+                      class="text-right"
+                      style="width: 120px;"
+                    >
                       Importe
                     </th>
-                    <th>Score</th>
+                    <th>Coincidencia</th>
+                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -345,7 +524,13 @@ onMounted(cargar)
                         <span class="text-body-2 font-weight-medium">
                           {{ propuesta.factura.numeroFactura || `#${propuesta.factura.id}` }}
                         </span>
-                        <VChip v-if="idx === 0" size="x-small" color="primary" variant="tonal" label>
+                        <VChip
+                          v-if="idx === 0"
+                          size="x-small"
+                          color="primary"
+                          variant="tonal"
+                          label
+                        >
                           mejor
                         </VChip>
                         <IconBtn
@@ -355,7 +540,11 @@ onMounted(cargar)
                           :loading="pdfLoadingId === propuesta.factura.id"
                           @click="verPdf(propuesta.factura)"
                         >
-                          <VIcon icon="tabler-file-type-pdf" color="error" size="18" />
+                          <VIcon
+                            icon="tabler-file-type-pdf"
+                            color="error"
+                            size="18"
+                          />
                         </IconBtn>
                       </div>
                     </td>
@@ -367,39 +556,51 @@ onMounted(cargar)
                       {{ formatMoney(propuesta.factura.importeTotal) }}
                     </td>
                     <td>
-                      <div class="d-flex flex-column ga-1 py-1">
-                        <div class="d-flex align-center ga-2">
-                          <VChip
-                            size="x-small"
-                            :color="colorConfianza(propuesta.confidence)"
-                            variant="tonal"
-                          >
-                            {{ propuesta.confidence }}
-                          </VChip>
-                          <span class="text-caption">score {{ propuesta.score }}</span>
-                        </div>
-                        <div class="d-flex flex-wrap ga-1">
-                          <VChip
-                            v-for="reason in propuesta.reasons"
-                            :key="reason"
-                            size="x-small"
-                            variant="outlined"
-                            color="secondary"
-                            label
-                          >
-                            {{ reason }}
-                          </VChip>
-                        </div>
-                      </div>
+                      <BadgeCoincidenciaConciliacion
+                        :nivel="(propuesta.confidence as 'alta' | 'media' | 'baja') || 'baja'"
+                        :motivos="propuesta.reasons"
+                        :score="propuesta.score"
+                      />
+                    </td>
+                    <td>
+                      <BotonDescartarSugerencia
+                        v-if="propuesta.factura.id != null"
+                        tipo-factura="PROVEEDOR"
+                        :factura-id="propuesta.factura.id"
+                        :movimiento-id="item.movimiento.id"
+                        @descartado="cargar"
+                      />
                     </td>
                   </tr>
                 </tbody>
               </VTable>
-              <div v-else class="text-caption text-disabled py-2">
+              <div
+                v-else
+                class="text-caption text-disabled py-2"
+              >
                 {{ item.motivo || 'Sin candidatas.' }}
               </div>
-              <div v-if="item.candidatas.length" class="d-flex justify-end mt-3">
+              <div class="d-flex justify-end gap-2 mt-3">
                 <VBtn
+                  size="small"
+                  variant="text"
+                  @click="abrirBusquedaManual(item)"
+                >
+                  Buscar manualmente
+                </VBtn>
+                <VBtn
+                  v-if="item.candidatas.length"
+                  size="small"
+                  variant="text"
+                  color="secondary"
+                  :loading="guardando"
+                  :disabled="!seleccionesMovimiento(item.movimiento.id).length"
+                  @click="descartarSeleccionMovimiento(item.movimiento.id)"
+                >
+                  Descartar seleccionados
+                </VBtn>
+                <VBtn
+                  v-if="item.candidatas.length"
                   size="small"
                   variant="text"
                   color="primary"
@@ -414,21 +615,84 @@ onMounted(cargar)
           </VCard>
         </VCol>
       </VRow>
+
+      <div class="d-flex align-center justify-space-between flex-wrap gap-2 mt-2">
+        <div class="d-flex align-center gap-2">
+          <span class="text-disabled text-body-2">Por página:</span>
+          <AppSelect
+            v-model="itemsPerPage"
+            :items="itemsPerPageOptions"
+            density="compact"
+            style="width: 90px;"
+            @update:model-value="cargarDesdePagina1"
+          />
+          <span class="text-disabled text-body-2">{{ totalItems }} movimientos en total</span>
+        </div>
+        <VPagination
+          v-if="totalItems > itemsPerPage"
+          v-model="page"
+          active-color="primary"
+          density="compact"
+          :length="Math.ceil(totalItems / itemsPerPage)"
+          :total-visible="5"
+          @update:model-value="cargar"
+        />
+      </div>
     </VCardText>
   </VCard>
 
-  <VDialog v-model="pdfDialogOpen" max-width="960" max-height="90vh" scrollable>
+  <VDialog
+    v-model="pdfDialogOpen"
+    max-width="960"
+    max-height="90vh"
+    scrollable
+  >
     <VCard>
       <VCardTitle class="d-flex align-center pa-3">
-        <VIcon icon="tabler-file-type-pdf" color="error" class="me-2" />
+        <VIcon
+          icon="tabler-file-type-pdf"
+          color="error"
+          class="me-2"
+        />
         Documento
         <VSpacer />
         <IconBtn @click="pdfDialogOpen = false">
           <VIcon icon="tabler-x" />
         </IconBtn>
       </VCardTitle>
-      <VCardText class="pa-0" style="height: 80vh;">
-        <iframe v-if="pdfUrl" :src="pdfUrl" style="width:100%;height:100%;border:none;" />
+      <VCardText
+        class="pa-0"
+        style="height: 80vh;"
+      >
+        <iframe
+          v-if="pdfUrl"
+          :src="pdfUrl"
+          style="width:100%;height:100%;border:none;"
+        />
+      </VCardText>
+    </VCard>
+  </VDialog>
+
+  <VDialog
+    v-model="busquedaManualDialog"
+    max-width="900"
+    scrollable
+  >
+    <VCard v-if="movimientoParaBusquedaManual">
+      <VCardTitle class="d-flex align-center">
+        Buscar facturas para el movimiento #{{ movimientoParaBusquedaManual.id }}
+        <VSpacer />
+        <IconBtn @click="busquedaManualDialog = false">
+          <VIcon icon="tabler-x" />
+        </IconBtn>
+      </VCardTitle>
+      <VCardText>
+        <PanelBusquedaManualConciliacion
+          tipo-factura="PROVEEDOR"
+          modo="movimiento"
+          :elemento="movimientoParaBusquedaManual"
+          @conciliado="alConciliarManual"
+        />
       </VCardText>
     </VCard>
   </VDialog>

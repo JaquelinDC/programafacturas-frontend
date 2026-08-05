@@ -86,11 +86,13 @@ export interface ConciliacionCoincidenciaDto {
 export interface ConciliacionCandidatoMovimientoDto {
   movimiento: ConciliacionMovimientoDto
   coincidencia: ConciliacionCoincidenciaDto
+  descartado: boolean
 }
 
 export interface ConciliacionCandidatoFacturaDto {
   factura: ConciliacionFacturaDto
   coincidencia: ConciliacionCoincidenciaDto
+  descartado: boolean
 }
 
 export interface ConciliacionEnlaceRequest {
@@ -104,6 +106,24 @@ export interface ConciliacionDesenlaceRequest {
   tipoFactura: TipoFacturaConciliacion
   facturaId: number
   movimientoId: number
+}
+
+export interface ConciliacionDescarteRequest {
+  tipoFactura: TipoFacturaConciliacion
+  facturaId: number
+  movimientoId: number
+  motivo?: string
+}
+
+export interface ConciliacionDescarteParDto {
+  facturaId: number
+  movimientoId: number
+}
+
+export interface ConciliacionDescarteLoteRequest {
+  tipoFactura: TipoFacturaConciliacion
+  pares: ConciliacionDescarteParDto[]
+  motivo?: string
 }
 
 export interface ConciliacionResultadoDto {
@@ -268,6 +288,7 @@ export interface FacturaConciliacionImporteDto {
   facturaNumero?: string
   facturaFecha?: string
   proveedorNombre?: string
+  proveedorFacturaId?: number
   importeTotal?: number
   libreParaConciliacion: boolean
   movimientoConceptoOk: boolean

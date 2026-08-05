@@ -1,13 +1,17 @@
 import type {
   ConciliacionCandidatoFacturaDto,
   ConciliacionCandidatoMovimientoDto,
+  ConciliacionDescarteLoteRequest,
+  ConciliacionDescarteRequest,
   ConciliacionDesenlaceRequest,
   ConciliacionEnlaceRequest,
   ConciliacionFacturaDto,
   ConciliacionMovimientoDto,
   ConciliacionResultadoDto,
   ConciliacionResumenDto,
+  FacturaProveedorDto,
   PageResponse,
+  ProveedorFacturaDto,
   TipoFacturaConciliacion,
 } from '@/types/api'
 import { $api } from '@/utils/api'
@@ -17,6 +21,7 @@ export interface ConciliacionBusqueda {
   fechaDesde?: string
   fechaHasta?: string
   importe?: number
+  proveedorId?: number
   page?: number
   size?: number
 }
@@ -27,6 +32,7 @@ function params(busqueda: ConciliacionBusqueda, extra: Record<string, unknown> =
     fechaDesde: busqueda.fechaDesde || undefined,
     fechaHasta: busqueda.fechaHasta || undefined,
     importe: busqueda.importe ?? undefined,
+    proveedorId: busqueda.proveedorId ?? undefined,
     page: busqueda.page ?? 0,
     size: busqueda.size ?? 20,
     ...extra,
@@ -55,16 +61,18 @@ export function useConciliacion() {
     tipoFactura: TipoFacturaConciliacion,
     facturaId: number,
     busqueda: ConciliacionBusqueda,
+    incluirDescartados = false,
   ) => $api<PageResponse<ConciliacionCandidatoMovimientoDto>>('/conciliacion/candidatos/movimientos', {
-    params: params(busqueda, { tipoFactura, facturaId, incluirConciliados: true }),
+    params: params(busqueda, { tipoFactura, facturaId, incluirConciliados: true, incluirDescartados }),
   })
 
   const candidatosFacturas = (
     movimientoId: number,
     tipoFactura: TipoFacturaConciliacion,
     busqueda: ConciliacionBusqueda,
+    incluirDescartados = false,
   ) => $api<PageResponse<ConciliacionCandidatoFacturaDto>>('/conciliacion/candidatos/facturas', {
-    params: params(busqueda, { movimientoId, tipoFactura, incluirConciliadas: true }),
+    params: params(busqueda, { movimientoId, tipoFactura, incluirConciliadas: true, incluirDescartados }),
   })
 
   const enlazar = (body: ConciliacionEnlaceRequest) =>
@@ -72,6 +80,20 @@ export function useConciliacion() {
 
   const desenlazar = (body: ConciliacionDesenlaceRequest) =>
     $api<ConciliacionResultadoDto>('/conciliacion/enlaces', { method: 'DELETE', body })
+
+  const descartar = (body: ConciliacionDescarteRequest) =>
+    $api<ConciliacionResultadoDto>('/conciliacion/descartes', { method: 'POST', body })
+
+  const deshacerDescarte = (body: ConciliacionDescarteRequest) =>
+    $api<ConciliacionResultadoDto>('/conciliacion/descartes', { method: 'DELETE', body })
+
+  const descartarLote = (body: ConciliacionDescarteLoteRequest) =>
+    $api<ConciliacionResultadoDto>('/conciliacion/descartes/lote', { method: 'POST', body })
+
+  const marcarCaja = (facturaId: number, comentario?: string) =>
+    $api<FacturaProveedorDto>(`/facturas/${facturaId}/marcar-caja`, { method: 'POST', body: { comentario } })
+
+  const proveedores = () => $api<ProveedorFacturaDto[]>('/proveedores-factura')
 
   return {
     resumen,
@@ -81,5 +103,10 @@ export function useConciliacion() {
     candidatosFacturas,
     enlazar,
     desenlazar,
+    descartar,
+    deshacerDescarte,
+    descartarLote,
+    marcarCaja,
+    proveedores,
   }
 }
