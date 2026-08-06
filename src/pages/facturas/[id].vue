@@ -6,7 +6,8 @@ import type {
   ProveedorFacturaDto,
   TipoPagoDto,
 } from '@/types/api'
-import { $api } from '@/utils/api'
+import { $api, apiErrorMessage } from '@/utils/api'
+import { useErrorDialog } from '@/composables/useErrorDialog'
 import { useDisplay } from 'vuetify'
 
 definePage({ meta: { title: 'Detalle Factura Proveedor' } })
@@ -25,6 +26,7 @@ const saving = ref(false)
 const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref<'success' | 'error'>('success')
+const { errorDialogVisible, errorDialogTitle, errorDialogMessage, showErrorDialog } = useErrorDialog()
 
 // ─── Alta proveedor ───────────────────────────────────────────────────────────
 const altaProveedorDialog = ref(false)
@@ -300,7 +302,7 @@ async function guardar() {
     showMsg('Factura guardada correctamente')
   }
   catch (e: any) {
-    showMsg(e?.data?.message || 'Error al guardar', 'error')
+    showErrorDialog(apiErrorMessage(e, 'Error al guardar'), 'No se pudo guardar la factura')
   }
   finally {
     saving.value = false
@@ -320,7 +322,7 @@ async function cambiarEstado() {
     showMsg('Estado actualizado')
   }
   catch (e: any) {
-    showMsg(e?.data?.message || 'Error al cambiar estado', 'error')
+    showErrorDialog(apiErrorMessage(e, 'Error al cambiar estado'), 'No se pudo cambiar el estado')
   }
   finally {
     estadoSaving.value = false
@@ -752,6 +754,8 @@ onUnmounted(() => {
   <VSnackbar v-model="snackbar" :color="snackbarColor" location="bottom end">
     {{ snackbarMsg }}
   </VSnackbar>
+
+  <ErrorAlertDialog v-model="errorDialogVisible" :title="errorDialogTitle" :message="errorDialogMessage" />
 
   <ProveedorFormDialog v-model="altaProveedorDialog" @saved="onProveedorCreado" />
 </template>

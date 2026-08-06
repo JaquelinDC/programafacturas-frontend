@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { EntidadDto, FacturaFiltrosRequest, FacturaProveedorDto } from '@/types/api'
-import { $api } from '@/utils/api'
+import { $api, apiErrorMessage } from '@/utils/api'
+import { useErrorDialog } from '@/composables/useErrorDialog'
 import { usePeriodoStore } from '@/stores/periodo'
 
 const periodoStore = usePeriodoStore()
@@ -14,6 +15,7 @@ const loading = ref(false)
 const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref('success')
+const { errorDialogVisible, errorDialogTitle, errorDialogMessage, showErrorDialog } = useErrorDialog()
 const recalculandoIncidencias = ref(false)
 const filtrosStorageKey = 'programafacturas.facturas.filtros'
 const itemsPerPageStorageKey = 'programafacturas.facturas.itemsPerPage'
@@ -572,7 +574,7 @@ async function validarFactura(item: FacturaProveedorDto) {
   try {
     const result = await $api<{ ok: boolean; error?: string }>(`/facturas/${item.id}/validar/ajax`, { method: 'POST' })
     if (!result.ok) {
-      showMsg(result.error || 'No se pudo validar la factura', 'error')
+      showErrorDialog(result.error || 'No se pudo validar la factura', 'No se pudo validar la factura')
       return
     }
     const found = facturas.value.find(f => f.id === item.id)
@@ -581,7 +583,7 @@ async function validarFactura(item: FacturaProveedorDto) {
     showMsg('Factura validada correctamente', 'success')
   }
   catch (e: any) {
-    showMsg(e?.data?.message || 'No se pudo validar la factura', 'error')
+    showErrorDialog(apiErrorMessage(e, 'No se pudo validar la factura'), 'No se pudo validar la factura')
   }
   finally {
     validandoId.value = null
@@ -1271,6 +1273,8 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
     <VSnackbar v-model="snackbar" :color="snackbarColor" timeout="4000">
       {{ snackbarMsg }}
     </VSnackbar>
+
+    <ErrorAlertDialog v-model="errorDialogVisible" :title="errorDialogTitle" :message="errorDialogMessage" />
   </div>
 </template>
 
