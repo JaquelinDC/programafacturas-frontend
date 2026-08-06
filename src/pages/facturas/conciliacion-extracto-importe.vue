@@ -190,25 +190,22 @@ async function conciliar() {
     return
   actionLoading.value = true
   try {
-    let mensaje = 'Conciliación completada'
-    for (const facturaId of facturaIdsAConciliar.value) {
-      const movimientoIds = selectedMovimientosPorFactura.value[facturaId] ?? []
-      if (!movimientoIds.length)
-        continue
-      const res = await $api<{ ok: boolean; mensaje: string }>(`/facturas/conciliacion-extracto-por-importe/conciliar-seleccion?${criteriosQuery()}`, {
-        method: 'POST',
-        body: { facturaIds: [facturaId], movimientoIds },
-      })
-      mensaje = res.mensaje
-    }
+    const vinculos = facturaIdsAConciliar.value.flatMap(facturaId =>
+      (selectedMovimientosPorFactura.value[facturaId] ?? [])
+        .map(movimientoId => ({ facturaId, movimientoId })),
+    )
+    const res = await $api<{ ok: boolean; mensaje: string; enlacesCreados: number }>(`/facturas/conciliacion-extracto-por-importe/conciliar-seleccion?${criteriosQuery()}`, {
+      method: 'POST',
+      body: { vinculos },
+    })
 
-    showMsg(mensaje)
+    showMsg(res.mensaje)
     limpiarSeleccion()
     confirmDialog.value = false
     await cargar()
   }
   catch (e: any) {
-    showMsg(e?.data?.message || 'No se pudo conciliar', 'error')
+    showMsg(e?.data?.message || e?.data?.error || 'No se pudo conciliar', 'error')
   }
   finally {
     actionLoading.value = false

@@ -50,6 +50,7 @@ export interface ConciliacionFacturaDto {
   tercero?: string
   fecha?: string
   importe?: number
+  importePendiente?: number
   estado?: string
   conciliada: boolean
   movimientoIds: number[]
@@ -69,7 +70,8 @@ export interface ConciliacionMovimientoDto {
   concepto?: string
   observaciones?: string
   importe?: number
-  estado: 'PENDIENTE' | 'CONCILIADO' | 'PAGO' | 'EXCLUIDO' | 'NO_CONCILIABLE'
+  importePendiente?: number
+  estado: 'PENDIENTE' | 'PARCIAL' | 'CONCILIADO' | 'PAGO' | 'EXCLUIDO' | 'NO_CONCILIABLE'
   facturas: ConciliacionFacturaRefDto[]
 }
 
@@ -130,8 +132,11 @@ export interface ProveedorFacturaDto {
   localidad?: string
   codigoContable?: string
   tipoFacturacion?: string
-  codigoCuentaGastoId?: number
-  codigoCuentaGastoCodigo?: string
+  codigoCuentaGastoId?: number | null
+  codigoCuentaGastoCodigo?: string | null
+  codigoCuentaGastoPredeterminadoId?: number | null
+  codigoCuentaGastoPredeterminadoCodigo?: string | null
+  codigoCuentaGastoPredeterminadoDescripcion?: string | null
 }
 
 export interface ConceptoMovimientoConciliacionDto {

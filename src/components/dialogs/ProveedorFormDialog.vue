@@ -30,7 +30,7 @@ const emptyForm = () => ({
   localidad: '',
   codigoContable: '',
   tipoFacturacion: '',
-  codigoCuentaGastoId: null as number | null,
+  codigoCuentaGastoPredeterminadoId: null as number | null,
 })
 
 const form = ref(emptyForm())
@@ -47,15 +47,6 @@ const codigosCuentaItems = computed(() =>
   codigosCuenta.value.map(c => ({ title: `${c.codigo} — ${c.descripcion}`, value: c.id }))
 )
 
-async function cargarCodigosCuenta() {
-  try {
-    codigosCuenta.value = await $api<CodigoCuentaGastoDto[]>('/codigos-cuenta-gasto')
-  }
-  catch {
-    codigosCuenta.value = []
-  }
-}
-
 watch(() => props.modelValue, open => {
   if (open) {
     errorMsg.value = null
@@ -67,7 +58,9 @@ watch(() => props.modelValue, open => {
       localidad: props.proveedor?.localidad ?? '',
       codigoContable: props.proveedor?.codigoContable ?? '',
       tipoFacturacion: props.proveedor?.tipoFacturacion ?? '',
-      codigoCuentaGastoId: props.proveedor?.codigoCuentaGastoId ?? null,
+      codigoCuentaGastoPredeterminadoId: props.proveedor?.codigoCuentaGastoPredeterminadoId
+        ?? props.proveedor?.codigoCuentaGastoId
+        ?? null,
     }
     conceptos.value = []
     nuevoConcepto.value = ''
@@ -77,6 +70,16 @@ watch(() => props.modelValue, open => {
       cargarConceptos(props.proveedor.id)
   }
 })
+
+async function cargarCodigosCuenta() {
+  if (codigosCuenta.value.length) return
+  try {
+    codigosCuenta.value = await $api<CodigoCuentaGastoDto[]>('/codigos-cuenta-gasto')
+  }
+  catch {
+    codigosCuenta.value = []
+  }
+}
 
 const conceptos = ref<ConceptoMovimientoConciliacionDto[]>([])
 const nuevoConcepto = ref('')
@@ -196,8 +199,8 @@ async function save() {
             </VCol>
             <VCol cols="12" sm="6">
               <AppSelect
-                v-model="form.codigoCuentaGastoId"
-                label="Cód. cuenta gasto (por defecto)"
+                v-model="form.codigoCuentaGastoPredeterminadoId"
+                label="Código de gasto predeterminado"
                 :items="codigosCuentaItems"
                 clearable
               />

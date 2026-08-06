@@ -81,6 +81,13 @@ const form = ref({
   codigoCuentaGastoId: null as number | null,
 })
 
+watch(() => form.value.proveedorFacturaId, proveedorId => {
+  if (form.value.codigoCuentaGastoId != null || proveedorId == null) return
+  const proveedor = proveedores.value.find(item => item.id === proveedorId)
+  if (proveedor?.codigoCuentaGastoPredeterminadoId != null)
+    form.value.codigoCuentaGastoId = proveedor.codigoCuentaGastoPredeterminadoId
+})
+
 // PDF
 const pdfBlobUrl = ref<string | null>(null)
 const pdfLoading = ref(false)

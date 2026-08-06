@@ -51,7 +51,7 @@ const headers = [
   { title: 'Localidad', key: 'localidad', width: 100 },
   { title: 'Cód. Contable', key: 'codigoContable', width: 140 },
   { title: 'Tipo Facturación', key: 'tipoFacturacion', width: 150 },
-  { title: 'Cód. Cuenta', key: 'codigoCuentaGastoCodigo', width: 130 },
+  { title: 'Código gasto pred.', key: 'codigoCuentaGastoPredeterminadoCodigo', width: 160 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 120 },
 ]
 </script>

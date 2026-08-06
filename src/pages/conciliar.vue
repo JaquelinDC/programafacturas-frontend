@@ -55,7 +55,7 @@ const formatMoney = (value?: number) => value == null
   : `${Number(value).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`
 
 function colorEstado(value?: string) {
-  if (['PENDIENTE', 'VALIDADA', 'SOLICITADA_FACTURA'].includes(value || ''))
+  if (['PENDIENTE', 'PARCIAL', 'VALIDADA', 'SOLICITADA_FACTURA'].includes(value || ''))
     return 'warning'
   if (['EXCLUIDO', 'NO_CONCILIABLE'].includes(value || ''))
     return 'secondary'
@@ -175,11 +175,6 @@ async function buscarCandidatosFactura() {
 }
 
 function toggleMovimiento(id: number, checked: boolean) {
-  if (tipo.value === 'EMITIDA') {
-    seleccionMov.value = checked ? [id] : []
-
-    return
-  }
   const next = new Set(seleccionMov.value)
 
   checked ? next.add(id) : next.delete(id)
@@ -205,9 +200,14 @@ function prepararConfirmacion() {
 
 async function refrescarTodo() {
   await Promise.all([cargarResumen(), buscarFacturas(), buscarMovimientos()])
-  if (tab.value === 'factura')
+  if (facturaActiva.value)
+    facturaActiva.value = facturas.value.find(item => item.id === facturaActiva.value?.id)
+  if (movimientoActivo.value)
+    movimientoActivo.value = movimientos.value.find(item => item.id === movimientoActivo.value?.id)
+  if (tab.value === 'factura' && facturaActiva.value)
     await buscarCandidatosMovimiento()
-  else await buscarCandidatosFactura()
+  else if (tab.value === 'movimiento' && movimientoActivo.value)
+    await buscarCandidatosFactura()
 }
 
 async function conciliar() {
@@ -438,7 +438,9 @@ onMounted(refrescarTodo)
                   @click="elegirFactura(factura)"
                 >
                   <VListItemTitle>{{ factura.numero || `Factura #${factura.id}` }} · {{ formatMoney(factura.importe) }}</VListItemTitle>
-                  <VListItemSubtitle>{{ factura.tercero || 'Sin tercero' }} · {{ formatDate(factura.fecha) }}</VListItemSubtitle>
+                  <VListItemSubtitle>
+                    {{ factura.tercero || 'Sin tercero' }} · {{ formatDate(factura.fecha) }} · Resta {{ formatMoney(factura.importePendiente) }}
+                  </VListItemSubtitle>
                   <template #append>
                     <div class="d-flex align-center gap-2">
                       <VChip
@@ -499,7 +501,7 @@ onMounted(refrescarTodo)
                 >
                   <VListItemTitle>Mov. #{{ movimiento.id }} · {{ formatMoney(movimiento.importe) }}</VListItemTitle>
                   <VListItemSubtitle>{{ movimiento.concepto || 'Sin concepto' }}</VListItemSubtitle>
-                  <VListItemSubtitle>{{ movimiento.banco }} · {{ formatDate(movimiento.fecha) }}</VListItemSubtitle>
+                  <VListItemSubtitle>{{ movimiento.banco }} · {{ formatDate(movimiento.fecha) }} · Resta {{ formatMoney(movimiento.importePendiente) }}</VListItemSubtitle>
                   <template #append>
                     <div class="d-flex align-center gap-2">
                       <VChip
@@ -554,8 +556,8 @@ onMounted(refrescarTodo)
                   </div>
                   <div class="text-body-2 text-disabled">
                     {{ tab === 'factura'
-                      ? `${facturaActiva?.numero || `#${facturaActiva?.id}`} · ${formatMoney(facturaActiva?.importe)}`
-                      : `Movimiento #${movimientoActivo?.id} · ${formatMoney(movimientoActivo?.importe)}` }}
+                      ? `${facturaActiva?.numero || `#${facturaActiva?.id}`} · ${formatMoney(facturaActiva?.importe)} · Resta ${formatMoney(facturaActiva?.importePendiente)}`
+                      : `Movimiento #${movimientoActivo?.id} · ${formatMoney(movimientoActivo?.importe)} · Resta ${formatMoney(movimientoActivo?.importePendiente)}` }}
                   </div>
                 </div>
                 <VBtn
@@ -627,8 +629,8 @@ onMounted(refrescarTodo)
         </VCardTitle>
         <VCardSubtitle>
           {{ tab === 'factura'
-            ? `${facturaActiva?.numero || `Factura #${facturaActiva?.id}`} · ${formatMoney(facturaActiva?.importe)}`
-            : `Movimiento #${movimientoActivo?.id} · ${formatMoney(movimientoActivo?.importe)}` }}
+            ? `${facturaActiva?.numero || `Factura #${facturaActiva?.id}`} · Resta ${formatMoney(facturaActiva?.importePendiente)}`
+            : `Movimiento #${movimientoActivo?.id} · Resta ${formatMoney(movimientoActivo?.importePendiente)}` }}
         </VCardSubtitle>
         <VCardText>
           <div class="d-flex gap-2 mb-4">
@@ -669,7 +671,10 @@ onMounted(refrescarTodo)
                 <div class="flex-grow-1">
                   <div class="d-flex justify-space-between gap-2">
                     <div><strong>Mov. #{{ item.movimiento.id }}</strong> · {{ item.movimiento.concepto || 'Sin concepto' }}</div>
-                    <strong>{{ formatMoney(item.movimiento.importe) }}</strong>
+                    <div class="text-end">
+                      <strong>{{ formatMoney(item.movimiento.importe) }}</strong>
+                      <div class="text-caption">Resta {{ formatMoney(item.movimiento.importePendiente) }}</div>
+                    </div>
                   </div>
                   <div class="text-caption text-disabled">
                     {{ item.movimiento.banco }} · {{ formatDate(item.movimiento.fecha) }} · Extracto #{{ item.movimiento.extractoId }}
@@ -713,7 +718,10 @@ onMounted(refrescarTodo)
                 <div class="flex-grow-1">
                   <div class="d-flex justify-space-between gap-2">
                     <div><strong>{{ item.factura.numero || `Factura #${item.factura.id}` }}</strong> · {{ item.factura.tercero }}</div>
-                    <strong>{{ formatMoney(item.factura.importe) }}</strong>
+                    <div class="text-end">
+                      <strong>{{ formatMoney(item.factura.importe) }}</strong>
+                      <div class="text-caption">Resta {{ formatMoney(item.factura.importePendiente) }}</div>
+                    </div>
                   </div>
                   <div class="text-caption text-disabled">
                     {{ formatDate(item.factura.fecha) }} · {{ item.factura.estado }}

@@ -56,7 +56,7 @@ export function useConciliacion() {
     facturaId: number,
     busqueda: ConciliacionBusqueda,
   ) => $api<PageResponse<ConciliacionCandidatoMovimientoDto>>('/conciliacion/candidatos/movimientos', {
-    params: params(busqueda, { tipoFactura, facturaId, incluirConciliados: true }),
+    params: params(busqueda, { tipoFactura, facturaId, incluirConciliados: false }),
   })
 
   const candidatosFacturas = (
@@ -64,7 +64,7 @@ export function useConciliacion() {
     tipoFactura: TipoFacturaConciliacion,
     busqueda: ConciliacionBusqueda,
   ) => $api<PageResponse<ConciliacionCandidatoFacturaDto>>('/conciliacion/candidatos/facturas', {
-    params: params(busqueda, { movimientoId, tipoFactura, incluirConciliadas: true }),
+    params: params(busqueda, { movimientoId, tipoFactura, incluirConciliadas: false }),
   })
 
   const enlazar = (body: ConciliacionEnlaceRequest) =>
