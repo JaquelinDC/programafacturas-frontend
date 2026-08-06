@@ -113,6 +113,36 @@ const estadoColor: Record<string, string> = {
   PAGADA: 'primary',
 }
 
+// ─── Trimestre asignado: selects de año/trimestre en vez de fecha libre ───────
+const trimestreOptions = [
+  { title: 'T1 (enero - marzo)', value: 1 },
+  { title: 'T2 (abril - junio)', value: 2 },
+  { title: 'T3 (julio - septiembre)', value: 3 },
+  { title: 'T4 (octubre - diciembre)', value: 4 },
+]
+const aniosTrimestre = computed(() => {
+  const actual = new Date().getFullYear()
+  return Array.from({ length: 6 }, (_, i) => actual - i)
+})
+function trimestreDeMes(mes: number) {
+  return Math.floor((mes - 1) / 3) + 1
+}
+function inicioTrimestreIso(anio: number, trimestre: number) {
+  return `${anio}-${String((trimestre - 1) * 3 + 1).padStart(2, '0')}-01`
+}
+const trimestreAnioSel = computed({
+  get: () => form.value.fechaTrimestre ? Number(form.value.fechaTrimestre.slice(0, 4)) : new Date().getFullYear(),
+  set: (anio: number) => {
+    form.value.fechaTrimestre = inicioTrimestreIso(anio, trimestreNumSel.value)
+  },
+})
+const trimestreNumSel = computed({
+  get: () => form.value.fechaTrimestre ? trimestreDeMes(Number(form.value.fechaTrimestre.slice(5, 7))) : trimestreDeMes(new Date().getMonth() + 1),
+  set: (trimestre: number) => {
+    form.value.fechaTrimestre = inicioTrimestreIso(trimestreAnioSel.value, trimestre)
+  },
+})
+
 // ─── Computed — visibilidad por tipo ─────────────────────────────────────────
 const esTicket = computed(() => form.value.tipo === 'TICKET')
 const esFacturaOProforma = computed(() => ['FACTURA', 'PROFORMA'].includes(form.value.tipo))
@@ -505,13 +535,25 @@ onUnmounted(() => {
                 <AppTextField v-model="form.fechaFactura" label="Fecha factura" type="date" />
               </VCol>
               <VCol cols="12" sm="6">
-                <AppTextField
-                  v-model="form.fechaTrimestre"
-                  label="Trimestre asignado"
-                  type="date"
-                  hint="Primer día del trimestre/año en que se contabiliza esta factura. Por defecto se calcula desde la fecha de factura; cámbialo para reasignarla a otro periodo."
-                  persistent-hint
-                />
+                <div class="d-flex gap-2">
+                  <AppSelect
+                    v-model="trimestreAnioSel"
+                    :items="aniosTrimestre"
+                    label="Año"
+                    style="max-width: 110px;"
+                  />
+                  <AppSelect
+                    v-model="trimestreNumSel"
+                    :items="trimestreOptions"
+                    item-title="title"
+                    item-value="value"
+                    label="Trimestre asignado"
+                    class="flex-grow-1"
+                  />
+                </div>
+                <p class="text-caption text-medium-emphasis mt-1 mb-0">
+                  Periodo en que se contabiliza esta factura. Por defecto se calcula desde la fecha de factura; cámbialo para reasignarla a otro periodo.
+                </p>
               </VCol>
               <VCol cols="12" sm="6">
                 <AppSelect v-model="form.tipo" label="Tipo" :items="tiposFactura" clearable />
