@@ -66,10 +66,7 @@ const form = ref({
   fechaFactura: '',
   fechaTrimestre: '',
   fechaPeticionFactura: '',
-  ivaBase0: 0,
-  ivaBase4: 0,
-  ivaBase10: 0,
-  ivaBase21: 0,
+  lineasIva: [] as { porcentajeIva: number; baseImponible: number }[],
   irpf: 0,
   importeTotal: 0,
   facturaEnDolares: false,
@@ -128,14 +125,11 @@ const muestraCuentaGasto = computed(() => !esTicket.value)
 
 // ─── Computed — IVA calculado ─────────────────────────────────────────────────
 const baseCalculada = computed(() =>
-  (form.value.ivaBase0 || 0) + (form.value.ivaBase4 || 0) +
-  (form.value.ivaBase10 || 0) + (form.value.ivaBase21 || 0)
+  Math.round(form.value.lineasIva.reduce((acc, l) => acc + (l.baseImponible || 0), 0) * 100) / 100
 )
 const ivaCalculado = computed(() =>
   Math.round(
-    ((form.value.ivaBase4 || 0) * 0.04 +
-     (form.value.ivaBase10 || 0) * 0.10 +
-     (form.value.ivaBase21 || 0) * 0.21) * 100
+    form.value.lineasIva.reduce((acc, l) => acc + (l.baseImponible || 0) * (l.porcentajeIva || 0) / 100, 0) * 100
   ) / 100
 )
 const totalCalculado = computed(() =>
@@ -144,6 +138,19 @@ const totalCalculado = computed(() =>
 const totalDescuadra = computed(() =>
   Math.abs(totalCalculado.value - (form.value.importeTotal || 0)) > 0.01
 )
+
+function addLineaIva() {
+  form.value.lineasIva.push({ porcentajeIva: 21, baseImponible: 0 })
+}
+function removeLineaIva(index: number) {
+  form.value.lineasIva.splice(index, 1)
+}
+function cuotaLinea(linea: { porcentajeIva: number; baseImponible: number }) {
+  return Math.round((linea.baseImponible || 0) * (linea.porcentajeIva || 0) / 100 * 100) / 100
+}
+function formatEUR(v: number) {
+  return `${v.toFixed(2)} €`
+}
 
 // ─── Computed — estado disponibles según tipo ─────────────────────────────────
 const estadosDisponibles = computed(() =>
@@ -187,25 +194,24 @@ watch(() => form.value.tipo, (nuevoTipo) => {
 
 // ─── Methods ──────────────────────────────────────────────────────────────────
 function fillForm(f: FacturaProveedorDto) {
-  const base = (pct: number) => {
-    const linea = f.lineasIva?.find(l => Number(l.porcentajeIva) === pct)
-    return linea ? Number(linea.baseImponible) : 0
-  }
   const tieneLineas = f.lineasIva && f.lineasIva.length > 0
 
-  // Sin líneas desglosadas: inferir el campo correcto por el ratio iva/baseImponible
-  let ivaBase0 = 0, ivaBase4 = 0, ivaBase10 = 0, ivaBase21 = 0
+  // Sin líneas desglosadas: inferir un único tipo de IVA por el ratio iva/baseImponible (compatibilidad con datos antiguos)
+  let lineasIva: { porcentajeIva: number; baseImponible: number }[] = []
   if (tieneLineas) {
-    ivaBase0 = base(0); ivaBase4 = base(4); ivaBase10 = base(10); ivaBase21 = base(21)
+    lineasIva = f.lineasIva!
+      .filter(l => Number(l.baseImponible) > 0 || Number(l.porcentajeIva) > 0)
+      .map(l => ({ porcentajeIva: Number(l.porcentajeIva) || 0, baseImponible: Number(l.baseImponible) || 0 }))
   } else {
     const baseVal = Number(f.baseImponible ?? 0)
     if (baseVal > 0) {
       const ivaVal = Number(f.iva ?? 0)
-      const pct = Math.round(ivaVal / baseVal * 100)
-      if (pct <= 1)       ivaBase0  = baseVal
-      else if (pct <= 6)  ivaBase4  = baseVal
-      else if (pct <= 15) ivaBase10 = baseVal
-      else                ivaBase21 = baseVal
+      // Sin desglose real: aproxima al tipo de IVA español más cercano en vez del ratio exacto
+      // (evita mostrar porcentajes imposibles como "19%" por pequeños desajustes de redondeo).
+      const ratio = ivaVal / baseVal * 100
+      const tiposReales = [0, 4, 10, 21]
+      const pct = tiposReales.reduce((mejor, t) => Math.abs(t - ratio) < Math.abs(mejor - ratio) ? t : mejor, tiposReales[0])
+      lineasIva = [{ porcentajeIva: pct, baseImponible: baseVal }]
     }
   }
 
@@ -216,7 +222,7 @@ function fillForm(f: FacturaProveedorDto) {
     fechaFactura: f.fechaFactura ? f.fechaFactura.substring(0, 10) : '',
     fechaTrimestre: f.fechaTrimestre ? f.fechaTrimestre.substring(0, 10) : '',
     fechaPeticionFactura: f.fechaPeticionFactura ? f.fechaPeticionFactura.substring(0, 10) : '',
-    ivaBase0, ivaBase4, ivaBase10, ivaBase21,
+    lineasIva,
     irpf: f.irpf ?? 0,
     importeTotal: f.importeTotal ?? 0,
     facturaEnDolares: f.facturaEnDolares,
@@ -278,12 +284,7 @@ async function guardar() {
         fechaFactura: form.value.fechaFactura || null,
         fechaTrimestre: form.value.fechaTrimestre || null,
         fechaPeticionFactura: form.value.fechaPeticionFactura || null,
-        lineasIva: [
-          { porcentajeIva: 0,  baseImponible: form.value.ivaBase0 || 0 },
-          { porcentajeIva: 4,  baseImponible: form.value.ivaBase4 || 0 },
-          { porcentajeIva: 10, baseImponible: form.value.ivaBase10 || 0 },
-          { porcentajeIva: 21, baseImponible: form.value.ivaBase21 || 0 },
-        ],
+        lineasIva: form.value.lineasIva.filter(l => (l.baseImponible || 0) > 0),
         irpf: form.value.irpf,
         importeTotal: form.value.importeTotal,
         facturaEnDolares: form.value.facturaEnDolares,
@@ -349,10 +350,7 @@ async function convertirUsd() {
 
     const rate = Number(data.usdToEur)
     const round2 = (v: number) => Math.round(v * rate * 100) / 100
-    form.value.ivaBase0  = round2(form.value.ivaBase0 || 0)
-    form.value.ivaBase4  = round2(form.value.ivaBase4 || 0)
-    form.value.ivaBase10 = round2(form.value.ivaBase10 || 0)
-    form.value.ivaBase21 = round2(form.value.ivaBase21 || 0)
+    form.value.lineasIva = form.value.lineasIva.map(l => ({ ...l, baseImponible: round2(l.baseImponible || 0) }))
     if (form.value.irpf) form.value.irpf = round2(form.value.irpf)
     form.value.importeTotal = totalCalculado.value
     usdMensaje.value = `Convertido a EUR con USD/EUR=${rate.toFixed(6)} (${data.fecha})`
@@ -566,54 +564,67 @@ onUnmounted(() => {
             <VRow>
               <!-- Bases imponibles por tipo de IVA (oculto para TICKET) -->
               <template v-if="muestraIvaDesglosado">
+                <VCol cols="12" class="d-flex align-center justify-space-between flex-wrap gap-2">
+                  <p class="text-subtitle-2 mb-0">Bases imponibles por tipo de IVA</p>
+                  <VBtn size="x-small" variant="tonal" prepend-icon="tabler-plus" @click="addLineaIva">
+                    Añadir tipo de IVA
+                  </VBtn>
+                </VCol>
+
                 <VCol cols="12">
-                  <p class="text-subtitle-2 mb-1">Bases imponibles por tipo de IVA</p>
+                  <VCard
+                    v-for="(linea, idx) in form.lineasIva"
+                    :key="idx"
+                    variant="outlined"
+                    class="d-flex flex-wrap align-center gap-3 pa-3 mb-2"
+                  >
+                    <div style="width: 90px;">
+                      <AppTextField
+                        v-model.number="linea.porcentajeIva"
+                        label="% IVA"
+                        type="number" step="0.01" min="0"
+                        density="compact"
+                        @update:model-value="form.importeTotal = totalCalculado"
+                      />
+                    </div>
+                    <div style="min-width: 160px; flex: 1 1 160px;">
+                      <AppTextField
+                        v-model.number="linea.baseImponible"
+                        label="Base imponible (€)"
+                        type="number" step="0.01" min="0"
+                        density="compact"
+                        @update:model-value="form.importeTotal = totalCalculado"
+                      />
+                    </div>
+                    <div class="text-body-2 text-medium-emphasis text-no-wrap">
+                      Cuota IVA<br>
+                      <strong class="text-high-emphasis">{{ formatEUR(cuotaLinea(linea)) }}</strong>
+                    </div>
+                    <VBtn
+                      icon="tabler-trash"
+                      size="small"
+                      variant="text"
+                      color="error"
+                      class="ms-auto"
+                      @click="removeLineaIva(idx); form.importeTotal = totalCalculado"
+                    />
+                  </VCard>
+                  <p v-if="form.lineasIva.length === 0" class="text-caption text-medium-emphasis mb-0">
+                    Sin líneas de IVA. Pulsa "Añadir tipo de IVA" para introducir una base imponible.
+                  </p>
                 </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    v-model.number="form.ivaBase0"
-                    label="Base imponible 0% (€)"
-                    type="number" step="0.01" min="0"
-                    @update:model-value="form.importeTotal = totalCalculado"
-                  />
-                </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    v-model.number="form.ivaBase4"
-                    label="Base imponible 4% (€)"
-                    type="number" step="0.01" min="0"
-                    @update:model-value="form.importeTotal = totalCalculado"
-                  />
-                </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    v-model.number="form.ivaBase10"
-                    label="Base imponible 10% (€)"
-                    type="number" step="0.01" min="0"
-                    @update:model-value="form.importeTotal = totalCalculado"
-                  />
-                </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    v-model.number="form.ivaBase21"
-                    label="Base imponible 21% (€)"
-                    type="number" step="0.01" min="0"
-                    @update:model-value="form.importeTotal = totalCalculado"
-                  />
-                </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    :model-value="baseCalculada.toFixed(2)"
-                    label="Base imponible (€)"
-                    readonly variant="outlined"
-                  />
-                </VCol>
-                <VCol cols="6" sm="3">
-                  <AppTextField
-                    :model-value="ivaCalculado.toFixed(2)"
-                    label="IVA (€)"
-                    readonly variant="outlined"
-                  />
+
+                <VCol cols="12"><VDivider /></VCol>
+
+                <VCol cols="12" sm="6" class="d-flex gap-4">
+                  <div>
+                    <p class="text-caption text-medium-emphasis mb-0">Base imponible total</p>
+                    <p class="text-subtitle-1 font-weight-medium mb-0">{{ formatEUR(baseCalculada) }}</p>
+                  </div>
+                  <div>
+                    <p class="text-caption text-medium-emphasis mb-0">IVA total</p>
+                    <p class="text-subtitle-1 font-weight-medium mb-0">{{ formatEUR(ivaCalculado) }}</p>
+                  </div>
                 </VCol>
               </template>
 
