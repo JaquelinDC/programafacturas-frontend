@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useErrorDialog } from '@/composables/useErrorDialog'
 import type {
   CodigoCuentaGastoDto,
   EntidadDto,
@@ -7,7 +8,6 @@ import type {
   TipoPagoDto,
 } from '@/types/api'
 import { $api, apiErrorMessage } from '@/utils/api'
-import { useErrorDialog } from '@/composables/useErrorDialog'
 import { useDisplay } from 'vuetify'
 
 definePage({ meta: { title: 'Detalle Factura Proveedor' } })
@@ -721,23 +721,35 @@ onUnmounted(() => {
             <VRow>
               <VCol cols="12">
                 <p class="text-body-2 text-medium-emphasis mb-1">Cambiar estado</p>
-                <div class="d-flex flex-wrap gap-2">
-                  <VBtn
-                    v-for="e in estadosDisponibles"
-                    :key="e"
-                    size="small"
-                    :color="nuevoEstado === e ? 'primary' : undefined"
-                    :variant="nuevoEstado === e ? 'flat' : 'tonal'"
-                    @click="nuevoEstado = e"
-                  >
-                    {{ estadoLabel[e] }}
-                  </VBtn>
+                <div class="d-flex flex-wrap justify-space-between align-center gap-3">
+                  <div class="d-flex flex-wrap gap-2">
+                    <VBtn
+                      v-for="e in estadosDisponibles"
+                      :key="e"
+                      size="small"
+                      :color="estadoColor[e]"
+                      :variant="nuevoEstado === e ? 'flat' : 'tonal'"
+                      @click="nuevoEstado = e"
+                    >
+                      {{ estadoLabel[e] }}
+                    </VBtn>
+                  </div>
+                  <div>
+                    <VBtn
+                      :loading="estadoSaving"
+                      :disabled="!nuevoEstado || nuevoEstado === factura.estado"
+                      :color="estadoColor[nuevoEstado] ?? 'primary'"
+                      variant="flat"
+                      prepend-icon="tabler-check"
+                      @click="cambiarEstado"
+                    >
+                      Aplicar estado
+                    </VBtn>
+                  </div>
                 </div>
               </VCol>
               <VCol cols="12" class="d-flex">
-                <VBtn :loading="estadoSaving" variant="tonal" @click="cambiarEstado">
-                  Aplicar estado
-                </VBtn>
+                
               </VCol>
               <VCol cols="12">
                 <AppTextarea v-model="form.comentarioPagoCajaOtros" label="Comentario pago caja/otros" rows="2" auto-grow />
