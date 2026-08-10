@@ -200,7 +200,7 @@ function abrirBusquedaManual(item: FacturaConciliacionImporteDto) {
     numero: item.facturaNumero,
     tercero: item.proveedorNombre,
     fecha: item.facturaFecha,
-    importe: item.importeTotal,
+    importe: item.importePendiente ?? item.importeTotal,
     conciliada: !item.libreParaConciliacion,
     movimientoIds: [],
   }
@@ -477,6 +477,12 @@ onMounted(cargar)
             <div class="text-right">
               <div class="text-subtitle-1">
                 {{ formatMoney(item.importeTotal) }}
+              </div>
+              <div
+                v-if="item.importePendiente != null && item.importePendiente !== item.importeTotal"
+                class="text-caption text-warning"
+              >
+                Pendiente: {{ formatMoney(item.importePendiente) }}
               </div>
               <VChip
                 size="small"

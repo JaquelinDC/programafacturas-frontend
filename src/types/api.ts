@@ -290,6 +290,7 @@ export interface FacturaConciliacionImporteDto {
   proveedorNombre?: string
   proveedorFacturaId?: number
   importeTotal?: number
+  importePendiente?: number
   libreParaConciliacion: boolean
   movimientoConceptoOk: boolean
   rutaPdf?: string
