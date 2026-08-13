@@ -62,6 +62,7 @@ function cargarImagenOriginal(file: File) {
   return new Promise<HTMLImageElement>((resolve, reject) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
+
     img.onload = () => {
       URL.revokeObjectURL(url)
       resolve(img)
@@ -87,12 +88,14 @@ async function procesarImagen() {
 
     if (width > MAX_DIMENSION || height > MAX_DIMENSION) {
       const escala = MAX_DIMENSION / Math.max(width, height)
+
       width = Math.round(width * escala)
       height = Math.round(height * escala)
     }
 
     const rotado90 = rotacion.value % 180 !== 0
     const canvas = document.createElement('canvas')
+
     canvas.width = rotado90 ? height : width
     canvas.height = rotado90 ? width : height
 
@@ -107,6 +110,7 @@ async function procesarImagen() {
     const blob = await new Promise<Blob | null>(resolve =>
       canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
     )
+
     if (!blob)
       throw new Error('No se pudo procesar la imagen')
 
@@ -140,6 +144,7 @@ async function onFileChange(file: File | File[] | null) {
 
   if (!nuevo) {
     fichero.value = null
+
     return
   }
 
@@ -149,6 +154,7 @@ async function onFileChange(file: File | File[] | null) {
     esPdf.value = true
     archivoOriginal.value = nuevo
     fichero.value = nuevo
+
     return
   }
 
@@ -164,6 +170,7 @@ async function onFileChange(file: File | File[] | null) {
       showMsg(e?.message || 'No se pudo leer la imagen', 'error')
       esImagen.value = false
     }
+
     return
   }
 
@@ -174,28 +181,32 @@ async function onFileChange(file: File | File[] | null) {
 async function subir() {
   if (!entidadId.value) {
     showMsg('Selecciona una entidad', 'error')
+
     return
   }
   if (!fichero.value) {
     showMsg('Selecciona un archivo', 'error')
+
     return
   }
 
   subiendo.value = true
   try {
     const form = new FormData()
+
     form.append('entidadId', String(entidadId.value))
     form.append('fichero', fichero.value)
+
     const result = await $api<{ ok: boolean; mensaje: string; id?: number }>('/facturas/subir-ticket', {
       method: 'POST',
       body: form,
     })
+
     showMsg(result.mensaje, 'success')
-    if (result.id) {
+    if (result.id)
       router.push(`/facturas/${result.id}`)
-    } else {
+    else
       router.push('/facturas')
-    }
   }
   catch (e: any) {
     showMsg(e?.data?.message || 'No se pudo subir el ticket', 'error')
@@ -207,18 +218,32 @@ async function subir() {
 
 onMounted(async () => {
   entidades.value = await $api<EntidadDto[]>('/entidades?todas=true')
+  entidadId.value = entidades.value.find(entidad => entidad.activo && entidad.ordenVisual === 0)?.id ?? null
 })
 </script>
 
 <template>
   <VCard>
-    <VCardTitle class="pa-4">Subir ticket / factura</VCardTitle>
+    <VCardTitle class="pa-4">
+      Subir ticket / factura
+    </VCardTitle>
     <VCardText>
       <VRow>
-        <VCol cols="12" md="6">
-          <AppSelect v-model="entidadId" :items="entidadesItems" label="Entidad" clearable />
+        <VCol
+          cols="12"
+          md="6"
+        >
+          <AppSelect
+            v-model="entidadId"
+            :items="entidadesItems"
+            label="Entidad"
+            clearable
+          />
         </VCol>
-        <VCol cols="12" md="6">
+        <VCol
+          cols="12"
+          md="6"
+        >
           <VFileInput
             label="Archivo PDF o imagen"
             accept=".pdf,.jpg,.jpeg,.png,.gif,.webp,image/*,application/pdf"
@@ -230,12 +255,24 @@ onMounted(async () => {
       </VRow>
 
       <!-- Previsualización de imagen con rotación -->
-      <VRow v-if="esImagen" class="mt-2">
+      <VRow
+        v-if="esImagen"
+        class="mt-2"
+      >
         <VCol cols="12">
           <div class="d-flex flex-column align-center gap-2">
             <div class="preview-container d-flex align-center justify-center">
-              <VProgressCircular v-if="procesando" indeterminate color="primary" />
-              <img v-else-if="previewUrl" :src="previewUrl" alt="Previsualización del ticket" class="preview-img">
+              <VProgressCircular
+                v-if="procesando"
+                indeterminate
+                color="primary"
+              />
+              <img
+                v-else-if="previewUrl"
+                :src="previewUrl"
+                alt="Previsualización del ticket"
+                class="preview-img"
+              >
             </div>
             <div class="d-flex align-center gap-2">
               <VBtn
@@ -253,7 +290,10 @@ onMounted(async () => {
                 @click="rotar(90)"
               />
             </div>
-            <p v-if="pesoFinal" class="text-caption text-medium-emphasis mb-0">
+            <p
+              v-if="pesoFinal"
+              class="text-caption text-medium-emphasis mb-0"
+            >
               {{ formatBytes(pesoOriginal) }} → {{ formatBytes(pesoFinal) }}
             </p>
           </div>
@@ -261,7 +301,10 @@ onMounted(async () => {
       </VRow>
 
       <!-- PDF: solo info del archivo -->
-      <VRow v-else-if="esPdf" class="mt-2">
+      <VRow
+        v-else-if="esPdf"
+        class="mt-2"
+      >
         <VCol cols="12">
           <p class="text-body-2 text-medium-emphasis">
             {{ archivoOriginal?.name }} ({{ formatBytes(pesoOriginal) }})
@@ -270,37 +313,61 @@ onMounted(async () => {
       </VRow>
 
       <!-- Indicador de procesado con IA -->
-      <div v-if="subiendo" class="mt-4">
-        <VProgressLinear indeterminate color="primary" rounded />
+      <div
+        v-if="subiendo"
+        class="mt-4"
+      >
+        <VProgressLinear
+          indeterminate
+          color="primary"
+          rounded
+        />
         <p class="text-center text-body-2 mt-2 text-medium-emphasis">
           Estamos leyendo tu factura con IA...
         </p>
       </div>
     </VCardText>
     <VCardActions class="pa-4">
-      <VBtn variant="tonal" :disabled="subiendo" @click="router.push('/facturas')">Cancelar</VBtn>
+      <VBtn
+        variant="tonal"
+        :disabled="subiendo"
+        @click="router.push('/facturas')"
+      >
+        Cancelar
+      </VBtn>
       <VSpacer />
-      <VBtn color="primary" :loading="subiendo" :disabled="subiendo || procesando" @click="subir">Subir</VBtn>
+      <VBtn
+        color="primary"
+        :loading="subiendo"
+        :disabled="subiendo || procesando"
+        @click="subir"
+      >
+        Subir
+      </VBtn>
     </VCardActions>
   </VCard>
 
-  <VSnackbar v-model="snackbar" :color="snackbarColor" timeout="4000">
+  <VSnackbar
+    v-model="snackbar"
+    :color="snackbarColor"
+    timeout="4000"
+  >
     {{ snackbarMsg }}
   </VSnackbar>
 </template>
 
 <style scoped>
 .preview-container {
-  width: 100%;
-  min-height: 120px;
-  max-height: 300px;
   overflow: hidden;
+  inline-size: 100%;
+  max-block-size: 300px;
+  min-block-size: 120px;
 }
 
 .preview-img {
-  max-width: 100%;
-  max-height: 300px;
-  object-fit: contain;
   border-radius: 8px;
+  max-block-size: 300px;
+  max-inline-size: 100%;
+  object-fit: contain;
 }
 </style>
