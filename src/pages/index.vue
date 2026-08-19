@@ -258,21 +258,13 @@ const headersMovimientos = [
           </p>
         </div>
 
-        <div class="d-flex align-center gap-3 flex-wrap">
-          <span class="text-caption text-medium-emphasis">
-            Periodo: usa el selector de la barra superior para cambiarlo
-          </span>
-          <VBtn
-            icon
-            variant="tonal"
-            color="primary"
-            size="small"
-            :loading="cargando"
-            @click="cargarDatos"
-          >
-            <VIcon icon="tabler-refresh" />
-          </VBtn>
-        </div>
+        <VBtn
+          to="/facturas/subir-ticket"
+          color="primary"
+          prepend-icon="tabler-upload"
+        >
+          Subir factura o ticket
+        </VBtn>
       </VCardText>
     </VCard>
 
