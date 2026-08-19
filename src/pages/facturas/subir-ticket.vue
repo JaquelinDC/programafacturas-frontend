@@ -16,6 +16,12 @@ const snackbar = ref(false)
 const snackbarMsg = ref('')
 const snackbarColor = ref<'success' | 'error'>('success')
 
+// Modo rápido: guarda el ticket para procesarlo más tarde con IA (p. ej. desde el móvil),
+// en vez de procesarlo con IA al momento (comportamiento actual desde el ordenador).
+const esMovil = useEsDispositivoMovil()
+const modoRapido = ref(false)
+const subidosSesion = ref<string[]>([])
+
 // Previsualización / rotación / compresión de imágenes
 const archivoOriginal = ref<File | null>(null)
 const imagenOriginal = ref<HTMLImageElement | null>(null)
@@ -193,20 +199,34 @@ async function subir() {
   subiendo.value = true
   try {
     const form = new FormData()
+    const nombreFichero = fichero.value.name
 
     form.append('entidadId', String(entidadId.value))
     form.append('fichero', fichero.value)
 
-    const result = await $api<{ ok: boolean; mensaje: string; id?: number }>('/facturas/subir-ticket', {
-      method: 'POST',
-      body: form,
-    })
+    if (modoRapido.value) {
+      const result = await $api<{ ok: boolean; mensaje: string }>('/facturas/subir-ticket-cola', {
+        method: 'POST',
+        body: form,
+      })
 
-    showMsg(result.mensaje, 'success')
-    if (result.id)
-      router.push(`/facturas/${result.id}`)
-    else
-      router.push('/facturas')
+      showMsg(result.mensaje, 'success')
+      subidosSesion.value.unshift(nombreFichero)
+      resetPreview()
+      fichero.value = null
+    }
+    else {
+      const result = await $api<{ ok: boolean; mensaje: string; id?: number }>('/facturas/subir-ticket', {
+        method: 'POST',
+        body: form,
+      })
+
+      showMsg(result.mensaje, 'success')
+      if (result.id)
+        router.push(`/facturas/${result.id}`)
+      else
+        router.push('/facturas')
+    }
   }
   catch (e: any) {
     showMsg(e?.data?.message || 'No se pudo subir el ticket', 'error')
@@ -220,6 +240,10 @@ onMounted(async () => {
   entidades.value = await $api<EntidadDto[]>('/entidades?todas=true')
   entidadId.value = entidades.value.find(entidad => entidad.activo && entidad.ordenVisual === 0)?.id ?? null
 })
+
+watch(esMovil, valor => {
+  modoRapido.value = valor
+}, { immediate: true })
 </script>
 
 <template>
@@ -251,6 +275,25 @@ onMounted(async () => {
             :disabled="subiendo || procesando"
             @update:model-value="onFileChange"
           />
+        </VCol>
+      </VRow>
+
+      <VRow>
+        <VCol cols="12">
+          <VSwitch
+            v-model="modoRapido"
+            :disabled="subiendo"
+            color="primary"
+            label="Modo rápido: guardar y procesar más tarde (sin IA al momento)"
+            hide-details
+          />
+          <p
+            v-if="modoRapido"
+            class="text-caption text-medium-emphasis mt-1 mb-0"
+          >
+            El ticket se guardará para procesarse automáticamente más tarde desde el ordenador
+            (botón «Procesar carpeta»). Podrás seguir subiendo más tickets sin salir de esta pantalla.
+          </p>
         </VCol>
       </VRow>
 
@@ -312,7 +355,7 @@ onMounted(async () => {
         </VCol>
       </VRow>
 
-      <!-- Indicador de procesado con IA -->
+      <!-- Indicador de subida / procesado con IA -->
       <div
         v-if="subiendo"
         class="mt-4"
@@ -323,8 +366,30 @@ onMounted(async () => {
           rounded
         />
         <p class="text-center text-body-2 mt-2 text-medium-emphasis">
-          Estamos leyendo tu factura con IA...
+          {{ modoRapido ? 'Guardando ticket...' : 'Estamos leyendo tu factura con IA...' }}
         </p>
+      </div>
+
+      <!-- Contador de tickets subidos en esta sesión (modo rápido) -->
+      <div
+        v-if="modoRapido && subidosSesion.length"
+        class="mt-4"
+      >
+        <p class="text-body-2 font-weight-medium mb-1">
+          Subidos en esta sesión: {{ subidosSesion.length }}
+        </p>
+        <VList
+          density="compact"
+          class="py-0"
+        >
+          <VListItem
+            v-for="(nombre, idx) in subidosSesion"
+            :key="`${idx}-${nombre}`"
+            :title="nombre"
+            prepend-icon="tabler-circle-check"
+            class="px-0"
+          />
+        </VList>
       </div>
     </VCardText>
     <VCardActions class="pa-4">

@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import type { EntidadDto, FacturaFiltrosRequest, FacturaProveedorDto } from '@/types/api'
-import { $api, apiErrorMessage } from '@/utils/api'
 import { useErrorDialog } from '@/composables/useErrorDialog'
 import { usePeriodoStore } from '@/stores/periodo'
+import type { EntidadDto, FacturaFiltrosRequest, FacturaProveedorDto } from '@/types/api'
+import { $api, apiErrorMessage } from '@/utils/api'
 
 const periodoStore = usePeriodoStore()
 
@@ -89,6 +89,7 @@ const tiposOptions = [
   { title: 'Factura', value: 'FACTURA' },
   { title: 'Proforma', value: 'PROFORMA' },
   { title: 'Indeterminada', value: 'INDETERMINADA' },
+  { title: 'Factura rectificativa o abono', value: 'RECTIFICATIVA_ABONO' },
 ]
 
 const tiposFiscalOptions = [
@@ -120,6 +121,7 @@ const tipoColor: Record<string, string> = {
   FACTURA: 'primary',
   PROFORMA: 'info',
   INDETERMINADA: 'warning',
+  RECTIFICATIVA_ABONO: 'error',
 }
 
 function sanitizarFiltros(input: FacturaFiltrosRequest): FacturaFiltrosRequest {
@@ -351,19 +353,14 @@ const entidadesItems = computed(() =>
 
 // ─── Tabla ────────────────────────────────────────────────────────────────────
 const headers = [
-  { title: 'ID', key: 'id', width: 50, sortable: true },
-  { title: 'Tipo', key: 'tipo', width: 110, sortable: true },
-  { title: 'Fecha', key: 'fechaFactura', width: 150, sortable: true },
-  { title: 'Proveedor', key: 'proveedorFacturaNombre', width: 200, sortable: true },
-  { title: '', key: 'incidencias', width: 40, sortable: false },
-  { title: 'Cuenta Aplicada', key: 'entidadNombre', width: 160, sortable: false },
-  { title: 'Nº Factura', key: 'numeroFactura', width: 120, sortable: true },
-  { title: 'Base', key: 'baseImponible', width: 80, sortable: true },
-  { title: 'IVA', key: 'iva', width: 80, sortable: true },
-  { title: 'IRPF', key: 'irpf', width: 80, sortable: true },
-  { title: 'Export. Contab.', key: 'fechaExportacionContabilidad', width: 100, sortable: true },
-  { title: 'Importe', key: 'importeTotal', width: 110, sortable: true },
-  { title: 'Acciones', key: 'actions', sortable: false, width: 400 },
+  { title: 'ID', key: 'id', width: 60, sortable: true },
+  { title: 'Tipo', key: 'tipo', width: 100, sortable: true },
+  { title: 'Fecha', key: 'fechaFactura', width: 110, sortable: true },
+  { title: 'Factura', key: 'proveedorFacturaNombre', width: 240, sortable: true },
+  { title: 'Cuenta Aplicada', key: 'entidadNombre', width: 150, sortable: false },
+  { title: 'Importe', key: 'importeTotal', width: 150, sortable: true },
+  { title: 'Contab.', key: 'fechaExportacionContabilidad', width: 70, sortable: true, align: 'center' as const },
+  { title: 'Acciones', key: 'actions', sortable: false, width: 260 },
 ]
 
 // ─── Row color by estado ──────────────────────────────────────────────────────
@@ -530,7 +527,7 @@ async function procesarCarpeta() {
       '/facturas/procesar-carpeta-json',
       { method: 'POST' },
     )
-    showMsg(result.mensaje, 'success')
+    showMsg(result.mensaje, result.errores ? 'warning' : 'success')
     limpiarCache()
     await buscar()
   }
@@ -699,6 +696,12 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
             color="warning"
             @click="aplicarFiltroRapidoTipo('INDETERMINADA')"
           >Indeterminadas</VChip>
+          <VChip
+            size="small"
+            :variant="filtros.tipo === 'RECTIFICATIVA_ABONO' ? 'elevated' : 'tonal'"
+            color="error"
+            @click="aplicarFiltroRapidoTipo('RECTIFICATIVA_ABONO')"
+          >Rectificativas</VChip>
 
           <VDivider vertical class="mx-1" />
 
@@ -1040,6 +1043,9 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
             @update:model-value="(value: boolean) => toggleFacturaSeleccionada(item.id, value)"
           />
         </template>
+        <template #item.id="{ item }">
+          <span class="text-high-emphasis font-weight-medium">#{{ item.id }}</span>
+        </template>
         <template #item.tipo="{ item }">
           <VChip
             v-if="item.tipo"
@@ -1049,28 +1055,46 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
           >{{ item.tipo }}</VChip>
         </template>
         <template #item.fechaFactura="{ item }">{{ formatDate(item.fechaFactura) }}</template>
-        <template #item.baseImponible="{ item }">{{ formatMoney(item.baseImponible) }}</template>
-        <template #item.iva="{ item }">{{ formatMoney(item.iva) }}</template>
-        <template #item.irpf="{ item }">{{ formatMoney(item.irpf) }}</template>
-        <template #item.fechaExportacionContabilidad="{ item }">{{ formatDate(item.fechaExportacionContabilidad) }}</template>
-        <template #item.importeTotal="{ item }">{{ formatMoney(item.importeTotal) }}</template>
-        <template #item.proveedorFacturaNombre="{ item }">
-          <span>{{ item.proveedorFacturaNombre ?? '—' }}</span>
+        <template #item.importeTotal="{ item }">
+          <div class="py-1">
+            <div class="text-high-emphasis font-weight-medium">{{ formatMoney(item.importeTotal) }}</div>
+            <div class="text-medium-emphasis text-caption d-flex justify-space-between">
+              <div>Base</div> <div>{{ formatMoney(item.baseImponible) }} </div>
+            </div>
+            <div class="text-medium-emphasis text-caption d-flex justify-space-between">
+              <div>IVA</div>  <div>{{ formatMoney(item.iva) }}</div>
+            </div>
+            <div class="text-medium-emphasis text-caption d-flex justify-space-between">
+             <template v-if="item.irpf"> </br> <div>IRPF</div> <div>{{ formatMoney(item.irpf) }}</div></template>
+            </div>
+          </div>
         </template>
-        <template #item.incidencias="{ item }">
-          <VTooltip v-if="item.incidencias" location="top" max-width="300">
+        <template #item.fechaExportacionContabilidad="{ item }">
+          <VTooltip location="top">
             <template #activator="{ props }">
-              <VChip
+              <VIcon
                 v-bind="props"
-                color="warning"
-                size="x-small"
-                label
-                prepend-icon="tabler-alert-triangle"
-                class="cursor-pointer"
-              >!</VChip>
+                :icon="item.fechaExportacionContabilidad ? 'tabler-circle-check-filled' : 'tabler-circle-dashed'"
+                :color="item.fechaExportacionContabilidad ? 'success' : 'disabled'"
+                size="20"
+              />
             </template>
-            <span>{{ item.incidencias }}</span>
+            <span>{{ item.fechaExportacionContabilidad ? `Exportada: ${formatDate(item.fechaExportacionContabilidad)}` : 'No exportada a contabilidad' }}</span>
           </VTooltip>
+        </template>
+        <template #item.proveedorFacturaNombre="{ item }">
+          <div class="d-flex align-center gap-1 py-1">
+            <VTooltip v-if="item.incidencias" location="top" max-width="300">
+              <template #activator="{ props }">
+                <VIcon v-bind="props" icon="tabler-alert-triangle" color="warning" size="16" />
+              </template>
+              <span>{{ item.incidencias }}</span>
+            </VTooltip>
+            <div>
+              <div class="text-high-emphasis font-weight-medium">{{ item.proveedorFacturaNombre ?? '—' }}</div>
+              <div class="text-medium-emphasis text-caption">Nº {{ item.numeroFactura ?? '—' }}</div>
+            </div>
+          </div>
         </template>
         <template #item.actions="{ item }">
           <div class="d-flex align-center flex-wrap gap-1">
@@ -1083,7 +1107,7 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
               :loading="validandoId === item.id"
               @click.stop="validarFactura(item)"
             >Validar</VBtn>
-           
+
             <!--Btn Gestionar IA (pendiente revisión, con PDF, no procesada aún)-->
             <VBtn
               v-if="item.rutaPdf && !item.procesadaIa && item.estado === 'PENDIENTE_REVISION'"
@@ -1102,12 +1126,27 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
               label
               prepend-icon="tabler-robot"
             >Procesada IA</VChip>
+            <!--Btn Editar-->
+            <VTooltip text="Editar factura" location="top">
+              <template #activator="{ props }">
+                <IconBtn
+                  v-bind="props"
+                  size="small"
+                  color="primary"
+                  variant="tonal"
+                  @click.stop="router.push({ path: `/facturas/${item.id}`, query: { q: busquedaLista } })"
+                >
+                  <VIcon icon="tabler-edit" />
+                </IconBtn>
+              </template>
+            </VTooltip>
             <VTooltip text="Conciliar con movimientos" location="top">
               <template #activator="{ props }">
                 <IconBtn
                   v-bind="props"
                   size="small"
                   color="primary"
+                  variant="tonal"
                   @click.stop="abrirConciliacion(item)"
                 >
                   <VIcon icon="tabler-arrows-exchange" />
@@ -1117,7 +1156,7 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
              <!--Btn Ver Documento-->
             <VTooltip :text="item.rutaPdf ? 'Ver documento' : 'Ver detalle'" location="top">
               <template #activator="{ props }">
-                <IconBtn v-bind="props" size="small" :loading="previewLoadingId === item.id" @click.stop="abrirVistaPrevia(item)">
+                <IconBtn v-bind="props" size="small" variant="tonal" :loading="previewLoadingId === item.id" @click.stop="abrirVistaPrevia(item)">
                   <VIcon :icon="item.rutaPdf ? 'tabler-file-search' : 'tabler-eye'" />
                 </IconBtn>
               </template>
@@ -1125,7 +1164,7 @@ watch([() => periodoStore.anio, () => periodoStore.trimestre], () => {
             <!--Btn Eliminar-->
             <VTooltip text="Eliminar factura" location="top">
               <template #activator="{ props }">
-                <IconBtn v-bind="props" size="small" color="error" @click.stop="confirmarEliminar(item)">
+                <IconBtn v-bind="props" size="small" color="error" variant="tonal" @click.stop="confirmarEliminar(item)">
                   <VIcon icon="tabler-trash" />
                 </IconBtn>
               </template>

@@ -97,7 +97,13 @@ const usdConvirtiendo = ref(false)
 const usdMensaje = ref('')
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const tiposFactura = ['INDETERMINADA', 'FACTURA', 'TICKET', 'PROFORMA']
+const tiposFactura = [
+  { title: 'Indeterminada', value: 'INDETERMINADA' },
+  { title: 'Factura', value: 'FACTURA' },
+  { title: 'Ticket', value: 'TICKET' },
+  { title: 'Proforma', value: 'PROFORMA' },
+  { title: 'Factura rectificativa o abono', value: 'RECTIFICATIVA_ABONO' },
+]
 const tiposFiscal = ['ORDINARIA', 'INTRACOMUNITARIA', 'INVERSION_SUJETO_PASIVO']
 const estadosOptions = ['PENDIENTE_REVISION', 'SOLICITADA_FACTURA', 'VALIDADA', 'PAGADA']
 const estadoLabel: Record<string, string> = {
@@ -145,7 +151,7 @@ const trimestreNumSel = computed({
 
 // ─── Computed — visibilidad por tipo ─────────────────────────────────────────
 const esTicket = computed(() => form.value.tipo === 'TICKET')
-const esFacturaOProforma = computed(() => ['FACTURA', 'PROFORMA'].includes(form.value.tipo))
+const esFacturaOProforma = computed(() => ['FACTURA', 'PROFORMA', 'RECTIFICATIVA_ABONO'].includes(form.value.tipo))
 const muestraFechaPeticion = computed(() => ['TICKET', 'PROFORMA'].includes(form.value.tipo))
 const muestraSeccionProveedor = computed(() => !esTicket.value)
 const muestraIvaDesglosado = computed(() => !esTicket.value)
@@ -162,8 +168,15 @@ const ivaCalculado = computed(() =>
     form.value.lineasIva.reduce((acc, l) => acc + (l.baseImponible || 0) * (l.porcentajeIva || 0) / 100, 0) * 100
   ) / 100
 )
+// El IRPF se guarda siempre como magnitud positiva (algunos documentos, o la IA al leerlos, lo
+// expresan en negativo, p. ej. -150); el signo con el que afecta al total lo decide el tipo de factura.
+const irpfModel = computed({
+  get: () => form.value.irpf,
+  set: (v: number) => { form.value.irpf = Math.abs(v || 0) },
+})
+const irpfSeSuma = computed(() => form.value.tipo === 'RECTIFICATIVA_ABONO')
 const totalCalculado = computed(() =>
-  Math.round((baseCalculada.value + ivaCalculado.value - (form.value.irpf || 0)) * 100) / 100
+  Math.round((baseCalculada.value + ivaCalculado.value + (irpfSeSuma.value ? 1 : -1) * Math.abs(form.value.irpf || 0)) * 100) / 100
 )
 const totalDescuadra = computed(() =>
   Math.abs(totalCalculado.value - (form.value.importeTotal || 0)) > 0.01
@@ -253,7 +266,7 @@ function fillForm(f: FacturaProveedorDto) {
     fechaTrimestre: f.fechaTrimestre ? f.fechaTrimestre.substring(0, 10) : '',
     fechaPeticionFactura: f.fechaPeticionFactura ? f.fechaPeticionFactura.substring(0, 10) : '',
     lineasIva,
-    irpf: f.irpf ?? 0,
+    irpf: Math.abs(f.irpf ?? 0),
     importeTotal: f.importeTotal ?? 0,
     facturaEnDolares: f.facturaEnDolares,
     conceptoGeneral: f.conceptoGeneral ?? '',
@@ -672,7 +685,7 @@ onUnmounted(() => {
 
               <VCol v-if="muestraIrpf" cols="6" sm="3">
                 <AppTextField
-                  v-model.number="form.irpf"
+                  v-model.number="irpfModel"
                   label="IRPF (€)"
                   type="number" step="0.01"
                   @update:model-value="form.importeTotal = totalCalculado"
