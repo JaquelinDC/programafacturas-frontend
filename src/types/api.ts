@@ -15,6 +15,9 @@ export interface AuthResponse {
   empresaId: number | null
   empresaNombre: string | null
   tenantKey: string | null
+  logoUrl: string | null
+  colorPrimario: string | null
+  logoAlto: number | null
 }
 
 // ─── Wrappers genéricos ───────────────────────────────────────────────────────
@@ -215,6 +218,8 @@ export interface EmpresaDto {
   updatedAt?: string
   logoUrl?: string
   emailContacto?: string
+  colorPrimario?: string
+  logoAlto?: number
 }
 
 // ─── Facturas ────────────────────────────────────────────────────────────────

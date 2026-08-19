@@ -10,6 +10,9 @@ export const useAuthStore = defineStore('auth', () => {
   const empresaId = ref<number | null>(null)
   const empresaNombre = ref<string | null>(null)
   const tenantKey = ref<string | null>(null)
+  const logoUrl = ref<string | null>(null)
+  const colorPrimario = ref<string | null>(null)
+  const logoAlto = ref<number | null>(null)
 
   const router = useRouter()
 
@@ -33,6 +36,9 @@ export const useAuthStore = defineStore('auth', () => {
     empresaId.value = res.empresaId ?? null
     empresaNombre.value = res.empresaNombre ?? null
     tenantKey.value = res.tenantKey ?? null
+    logoUrl.value = res.logoUrl ?? null
+    colorPrimario.value = res.colorPrimario ?? null
+    logoAlto.value = res.logoAlto ?? null
   }
 
   async function fetchMe(): Promise<void> {
@@ -44,10 +50,20 @@ export const useAuthStore = defineStore('auth', () => {
       empresaId.value = res.empresaId ?? null
       empresaNombre.value = res.empresaNombre ?? null
       tenantKey.value = res.tenantKey ?? null
+      logoUrl.value = res.logoUrl ?? null
+      colorPrimario.value = res.colorPrimario ?? null
+      logoAlto.value = res.logoAlto ?? null
     }
     catch {
       logout()
     }
+  }
+
+  /** Actualiza logo/color/alto en el store tras editarlos en "Mi Empresa", sin necesidad de otro login. */
+  function actualizarBranding(nuevoLogoUrl: string | null, nuevoColorPrimario: string | null, nuevoLogoAlto: number | null = logoAlto.value): void {
+    logoUrl.value = nuevoLogoUrl
+    colorPrimario.value = nuevoColorPrimario
+    logoAlto.value = nuevoLogoAlto
   }
 
   function logout(): void {
@@ -58,6 +74,9 @@ export const useAuthStore = defineStore('auth', () => {
     empresaId.value = null
     empresaNombre.value = null
     tenantKey.value = null
+    logoUrl.value = null
+    colorPrimario.value = null
+    logoAlto.value = null
     router.push('/login')
   }
 
@@ -69,11 +88,15 @@ export const useAuthStore = defineStore('auth', () => {
     empresaId,
     empresaNombre,
     tenantKey,
+    logoUrl,
+    colorPrimario,
+    logoAlto,
     isLoggedIn,
     isAdmin,
     isSuperAdmin,
     login,
     fetchMe,
     logout,
+    actualizarBranding,
   }
 })

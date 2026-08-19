@@ -9,11 +9,15 @@ declare global {
   const $api: typeof import('./src/utils/api')['$api']
   const COOKIE_MAX_AGE_1_YEAR: typeof import('./src/utils/constants')['COOKIE_MAX_AGE_1_YEAR']
   const CreateUrl: typeof import('./src/@core/composable/CreateUrl')['CreateUrl']
+  const DEFAULT_LOGO_HEIGHT: typeof import('./src/utils/empresaBranding')['DEFAULT_LOGO_HEIGHT']
   const EffectScope: typeof import('vue')['EffectScope']
+  const MAX_LOGO_HEIGHT: typeof import('./src/utils/empresaBranding')['MAX_LOGO_HEIGHT']
+  const MIN_LOGO_HEIGHT: typeof import('./src/utils/empresaBranding')['MIN_LOGO_HEIGHT']
   const acceptHMRUpdate: typeof import('pinia')['acceptHMRUpdate']
   const alphaDashValidator: typeof import('./src/@core/utils/validators')['alphaDashValidator']
   const alphaValidator: typeof import('./src/@core/utils/validators')['alphaValidator']
   const apiErrorMessage: typeof import('./src/utils/api')['apiErrorMessage']
+  const applyEmpresaPrimaryColor: typeof import('./src/utils/empresaBranding')['applyEmpresaPrimaryColor']
   const asyncComputed: typeof import('@vueuse/core')['asyncComputed']
   const autoResetRef: typeof import('@vueuse/core')['autoResetRef']
   const avatarText: typeof import('./src/@core/utils/formatters')['avatarText']
@@ -40,6 +44,7 @@ declare global {
   const createUnrefFn: typeof import('@vueuse/core')['createUnrefFn']
   const createUrl: typeof import('./src/@core/composable/createUrl')['createUrl']
   const customRef: typeof import('vue')['customRef']
+  const darkenHex: typeof import('./src/@core/utils/colorConverter')['darkenHex']
   const debouncedRef: typeof import('@vueuse/core')['debouncedRef']
   const debouncedWatch: typeof import('@vueuse/core')['debouncedWatch']
   const defineAsyncComponent: typeof import('vue')['defineAsyncComponent']
@@ -57,7 +62,9 @@ declare global {
   const getActivePinia: typeof import('pinia')['getActivePinia']
   const getCurrentInstance: typeof import('vue')['getCurrentInstance']
   const getCurrentScope: typeof import('vue')['getCurrentScope']
+  const getReadableOnColor: typeof import('./src/@core/utils/colorConverter')['getReadableOnColor']
   const h: typeof import('vue')['h']
+  const hexColorValidator: typeof import('./src/@core/utils/validators')['hexColorValidator']
   const hexToRgb: typeof import('./src/@core/utils/colorConverter')['hexToRgb']
   const ignorableWatch: typeof import('@vueuse/core')['ignorableWatch']
   const inject: typeof import('vue')['inject']
@@ -131,6 +138,7 @@ declare global {
   const registerPlugins_: typeof import('./src/@core/utils/plugins')['registerPlugins_']
   const requiredValidator: typeof import('./src/@core/utils/validators')['requiredValidator']
   const resolveComponent: typeof import('vue')['resolveComponent']
+  const resolveLogoUrl: typeof import('./src/utils/empresaBranding')['resolveLogoUrl']
   const resolveRef: typeof import('@vueuse/core')['resolveRef']
   const resolveUnref: typeof import('@vueuse/core')['resolveUnref']
   const resolveVuetifyTheme: typeof import('./src/@core/utils/vuetify')['resolveVuetifyTheme']
@@ -385,11 +393,15 @@ declare module 'vue' {
   interface ComponentCustomProperties {
     readonly $api: UnwrapRef<typeof import('./src/utils/api')['$api']>
     readonly COOKIE_MAX_AGE_1_YEAR: UnwrapRef<typeof import('./src/utils/constants')['COOKIE_MAX_AGE_1_YEAR']>
+    readonly DEFAULT_LOGO_HEIGHT: UnwrapRef<typeof import('./src/utils/empresaBranding')['DEFAULT_LOGO_HEIGHT']>
     readonly EffectScope: UnwrapRef<typeof import('vue')['EffectScope']>
+    readonly MAX_LOGO_HEIGHT: UnwrapRef<typeof import('./src/utils/empresaBranding')['MAX_LOGO_HEIGHT']>
+    readonly MIN_LOGO_HEIGHT: UnwrapRef<typeof import('./src/utils/empresaBranding')['MIN_LOGO_HEIGHT']>
     readonly acceptHMRUpdate: UnwrapRef<typeof import('pinia')['acceptHMRUpdate']>
     readonly alphaDashValidator: UnwrapRef<typeof import('./src/@core/utils/validators')['alphaDashValidator']>
     readonly alphaValidator: UnwrapRef<typeof import('./src/@core/utils/validators')['alphaValidator']>
     readonly apiErrorMessage: UnwrapRef<typeof import('./src/utils/api')['apiErrorMessage']>
+    readonly applyEmpresaPrimaryColor: UnwrapRef<typeof import('./src/utils/empresaBranding')['applyEmpresaPrimaryColor']>
     readonly asyncComputed: UnwrapRef<typeof import('@vueuse/core')['asyncComputed']>
     readonly autoResetRef: UnwrapRef<typeof import('@vueuse/core')['autoResetRef']>
     readonly avatarText: UnwrapRef<typeof import('./src/@core/utils/formatters')['avatarText']>
@@ -416,6 +428,7 @@ declare module 'vue' {
     readonly createUnrefFn: UnwrapRef<typeof import('@vueuse/core')['createUnrefFn']>
     readonly createUrl: UnwrapRef<typeof import('./src/@core/composable/createUrl')['createUrl']>
     readonly customRef: UnwrapRef<typeof import('vue')['customRef']>
+    readonly darkenHex: UnwrapRef<typeof import('./src/@core/utils/colorConverter')['darkenHex']>
     readonly debouncedRef: UnwrapRef<typeof import('@vueuse/core')['debouncedRef']>
     readonly debouncedWatch: UnwrapRef<typeof import('@vueuse/core')['debouncedWatch']>
     readonly defineAsyncComponent: UnwrapRef<typeof import('vue')['defineAsyncComponent']>
@@ -432,7 +445,9 @@ declare module 'vue' {
     readonly getActivePinia: UnwrapRef<typeof import('pinia')['getActivePinia']>
     readonly getCurrentInstance: UnwrapRef<typeof import('vue')['getCurrentInstance']>
     readonly getCurrentScope: UnwrapRef<typeof import('vue')['getCurrentScope']>
+    readonly getReadableOnColor: UnwrapRef<typeof import('./src/@core/utils/colorConverter')['getReadableOnColor']>
     readonly h: UnwrapRef<typeof import('vue')['h']>
+    readonly hexColorValidator: UnwrapRef<typeof import('./src/@core/utils/validators')['hexColorValidator']>
     readonly hexToRgb: UnwrapRef<typeof import('./src/@core/utils/colorConverter')['hexToRgb']>
     readonly ignorableWatch: UnwrapRef<typeof import('@vueuse/core')['ignorableWatch']>
     readonly inject: UnwrapRef<typeof import('vue')['inject']>
@@ -504,6 +519,7 @@ declare module 'vue' {
     readonly registerPlugins: UnwrapRef<typeof import('./src/@core/utils/plugins')['registerPlugins']>
     readonly requiredValidator: UnwrapRef<typeof import('./src/@core/utils/validators')['requiredValidator']>
     readonly resolveComponent: UnwrapRef<typeof import('vue')['resolveComponent']>
+    readonly resolveLogoUrl: UnwrapRef<typeof import('./src/utils/empresaBranding')['resolveLogoUrl']>
     readonly resolveRef: UnwrapRef<typeof import('@vueuse/core')['resolveRef']>
     readonly resolveUnref: UnwrapRef<typeof import('@vueuse/core')['resolveUnref']>
     readonly resolveVuetifyTheme: UnwrapRef<typeof import('./src/@core/utils/vuetify')['resolveVuetifyTheme']>

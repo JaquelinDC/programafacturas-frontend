@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { useRouter } from 'vue-router'
 import { useCrud } from '@/composables/useCrud'
 import { useAuthStore } from '@/stores/auth'
 import type { EmpresaDto } from '@/types/api'
 import { $api } from '@/utils/api'
-import { useRouter } from 'vue-router'
+import { DEFAULT_LOGO_HEIGHT, resolveLogoUrl } from '@/utils/empresaBranding'
+import { requiredValidator } from '@core/utils/validators'
 
 definePage({ meta: { title: 'Empresas', requiresSuperAdmin: true } })
 
@@ -27,6 +29,8 @@ const form = ref({
   codigoInterno: '',
   emailContacto: '',
   logoUrl: '',
+  colorPrimario: '',
+  logoAlto: DEFAULT_LOGO_HEIGHT,
   activa: true,
 })
 
@@ -49,6 +53,8 @@ watch(dialog, open => {
       codigoInterno: editingItem.value?.codigoInterno ?? '',
       emailContacto: editingItem.value?.emailContacto ?? '',
       logoUrl: editingItem.value?.logoUrl ?? '',
+      colorPrimario: editingItem.value?.colorPrimario ?? '',
+      logoAlto: editingItem.value?.logoAlto ?? DEFAULT_LOGO_HEIGHT,
       activa: editingItem.value?.activa ?? true,
     }
   }
@@ -60,11 +66,13 @@ const itemsPerPage = ref(10)
 watch(search, () => { page.value = 1 })
 
 const headers = [
+  { title: '', key: 'logo', width: 56, sortable: false },
   { title: 'ID', key: 'id', width: 70 },
   { title: 'Codigo', key: 'codigoInterno', width: 120 },
   { title: 'Nombre', key: 'nombre' },
   { title: 'CIF', key: 'cif', width: 130 },
   { title: 'Email contacto', key: 'emailContacto' },
+  { title: 'Color', key: 'colorPrimario', width: 80, sortable: false },
   { title: 'Activa', key: 'activa', width: 100 },
   { title: 'Creada', key: 'creadaEn', width: 160 },
   { title: 'Acciones', key: 'actions', sortable: false, width: 160 },
@@ -154,6 +162,16 @@ async function saveAdmin() {
         item-value="id"
         hover
       >
+        <template #item.logo="{ item }">
+          <VAvatar size="32" rounded="lg" :color="item.logoUrl ? undefined : 'secondary'" :variant="item.logoUrl ? undefined : 'tonal'">
+            <VImg v-if="resolveLogoUrl(item.logoUrl)" :src="resolveLogoUrl(item.logoUrl)!" alt="" />
+            <VIcon v-else icon="tabler-building-skyscraper" size="18" />
+          </VAvatar>
+        </template>
+        <template #item.colorPrimario="{ item }">
+          <VAvatar v-if="item.colorPrimario" size="20" :style="{ backgroundColor: item.colorPrimario }" />
+          <span v-else class="text-disabled">—</span>
+        </template>
         <template #item.activa="{ item }">
           <VChip :color="item.activa ? 'success' : 'default'" size="small" label>
             {{ item.activa ? 'Activa' : 'Inactiva' }}
@@ -200,33 +218,28 @@ async function saveAdmin() {
         <DialogCloseBtn @click="dialog = false" />
         <VCardText>
           <VForm @submit.prevent="save(form)">
-            <VRow>
-              <VCol cols="12" sm="6">
-                <AppTextField v-model="form.nombre" label="Nombre *" required />
-              </VCol>
-              <VCol cols="12" sm="6">
-                <AppTextField v-model="form.cif" label="CIF / NIF" />
-              </VCol>
-              <VCol cols="12" sm="6">
-                <AppTextField
-                  v-model="form.codigoInterno"
-                  label="Codigo interno *"
-                  :disabled="!!editingItem"
-                  hint="Identificador unico, no modificable tras la creacion"
-                  persistent-hint
-                  required
-                />
-              </VCol>
-              <VCol cols="12" sm="6">
-                <AppTextField v-model="form.emailContacto" label="Email de contacto" type="email" />
-              </VCol>
-              <VCol cols="12">
-                <AppTextField v-model="form.logoUrl" label="URL del logo" />
-              </VCol>
-              <VCol cols="12">
-                <VSwitch v-model="form.activa" label="Activa" color="primary" />
-              </VCol>
-            </VRow>
+            <EmpresaBrandingForm
+              v-model:form="form"
+              :logo-upload-endpoint="editingItem ? `/admin/empresas/${editingItem.id}/logo` : null"
+            >
+              <template #extra-fields>
+                <VRow>
+                  <VCol cols="12" sm="6">
+                    <AppTextField
+                      v-model="form.codigoInterno"
+                      label="Codigo interno *"
+                      :disabled="!!editingItem"
+                      hint="Identificador unico, no modificable tras la creacion"
+                      persistent-hint
+                      :rules="[requiredValidator]"
+                    />
+                  </VCol>
+                  <VCol cols="12" sm="6" class="d-flex align-center">
+                    <VSwitch v-model="form.activa" label="Activa" color="primary" />
+                  </VCol>
+                </VRow>
+              </template>
+            </EmpresaBrandingForm>
           </VForm>
         </VCardText>
         <VCardActions class="justify-end pt-0 pb-4 px-6">

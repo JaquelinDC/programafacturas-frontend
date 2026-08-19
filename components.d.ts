@@ -45,6 +45,7 @@ declare module 'vue' {
     CustomRadiosWithImage: typeof import('./src/@core/components/app-form-elements/CustomRadiosWithImage.vue')['default']
     DialogCloseBtn: typeof import('./src/@core/components/DialogCloseBtn.vue')['default']
     DropZone: typeof import('./src/@core/components/DropZone.vue')['default']
+    EmpresaBrandingForm: typeof import('./src/components/EmpresaBrandingForm.vue')['default']
     EnableOneTimePasswordDialog: typeof import('./src/components/dialogs/EnableOneTimePasswordDialog.vue')['default']
     EnlaceAltaManualFactura: typeof import('./src/components/conciliacion/EnlaceAltaManualFactura.vue')['default']
     ErrorAlertDialog: typeof import('./src/components/ErrorAlertDialog.vue')['default']

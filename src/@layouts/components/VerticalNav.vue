@@ -5,7 +5,7 @@ import { VNodeRenderer } from './VNodeRenderer'
 import { layoutConfig } from '@layouts'
 import { VerticalNavGroup, VerticalNavLink, VerticalNavSectionTitle } from '@layouts/components'
 import { useLayoutConfigStore } from '@layouts/stores/config'
-import { injectionKeyIsVerticalNavHovered } from '@layouts/symbols'
+import { injectionKeyIsVerticalNavHovered, injectionKeyVerticalNavLogoOverride } from '@layouts/symbols'
 import type { NavGroup, NavLink, NavSectionTitle, VerticalNavItems } from '@layouts/types'
 
 interface Props {
@@ -24,6 +24,9 @@ const refNav = ref()
 const isHovered = useElementHover(refNav)
 
 provide(injectionKeyIsVerticalNavHovered, isHovered)
+
+// Logo override opcional (p.ej. logo de empresa), inyectado por la app; @layouts no depende de @/.
+const logoOverride = inject(injectionKeyVerticalNavLogoOverride, ref(null))
 
 const configStore = useLayoutConfigStore()
 
@@ -78,7 +81,13 @@ const hideTitleAndIcon = configStore.isVerticalNavMini(isHovered)
           to="/"
           class="app-logo app-title-wrapper"
         >
-          <VNodeRenderer :nodes="layoutConfig.app.logo" />
+          <img
+            v-if="logoOverride"
+            :src="logoOverride.src"
+            alt="Logo de la empresa"
+            :style="{ maxHeight: `${logoOverride.maxHeight}px`, maxWidth: '100%' }"
+          >
+          <VNodeRenderer v-else :nodes="layoutConfig.app.logo" />
 
           <!-- <Transition name="vertical-nav-app-title">
             <h1

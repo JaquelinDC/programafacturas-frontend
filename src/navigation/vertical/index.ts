@@ -85,6 +85,11 @@ export default [
   },
   { heading: 'Administración' },
   {
+    title: 'Mi Empresa',
+    to: { name: 'empresa' },
+    icon: { icon: 'tabler-building-store' },
+  },
+  {
     title: 'Panel admin',
     to: { name: 'admin' },
     icon: { icon: 'tabler-shield-lock' },

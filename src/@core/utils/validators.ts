@@ -94,6 +94,14 @@ export const lengthValidator = (value: unknown, length: number) => {
   return String(value).length === length || `"The length of the Characters field must be ${length} characters."`
 }
 
+// 👉 Hex Color Validator
+export const hexColorValidator = (value: unknown) => {
+  if (isEmpty(value))
+    return true
+
+  return /^#[0-9a-f]{6}$/i.test(String(value)) || 'El color debe ser un hexadecimal válido, ej. #0C6FB4'
+}
+
 // 👉 Alpha-dash Validator
 export const alphaDashValidator = (value: unknown) => {
   if (isEmpty(value))
