@@ -76,6 +76,15 @@ function colorEstado(value?: string) {
   return 'success'
 }
 
+function labelEstadoFactura(value?: string) {
+  if (value === 'PARCIAL' || value === 'PAGADA_PARCIALMENTE')
+    return 'Pagada parcialmente'
+  if (value === 'CONCILIADO' || value === 'PAGADA')
+    return 'Pagada'
+
+  return value
+}
+
 function getError(err: any, fallback: string) {
   return err?.data?.message || err?.message || fallback
 }
@@ -402,7 +411,7 @@ onMounted(refrescarTodo)
                       :color="colorEstado(factura.estado)"
                       variant="tonal"
                     >
-                      {{ factura.estado }}
+                      {{ labelEstadoFactura(factura.estado) }}
                     </VChip>
                   </template>
                 </VListItem>

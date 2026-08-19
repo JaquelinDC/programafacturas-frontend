@@ -80,6 +80,7 @@ const estadosOptions = [
   { title: 'Pendiente de revisión', value: 'PENDIENTE_REVISION' },
   { title: 'Solicitada factura', value: 'SOLICITADA_FACTURA' },
   { title: 'Validada', value: 'VALIDADA' },
+  { title: 'Pagada parcialmente', value: 'PAGADA_PARCIALMENTE' },
   { title: 'Pagada', value: 'PAGADA' },
 ]
 
@@ -106,6 +107,7 @@ const estadoColor: Record<string, string> = {
   PENDIENTE_REVISION: 'warning',
   SOLICITADA_FACTURA: 'info',
   VALIDADA: 'success',
+  PAGADA_PARCIALMENTE: 'warning',
   PAGADA: 'primary',
 }
 
@@ -113,6 +115,7 @@ const estadoLabel: Record<string, string> = {
   PENDIENTE_REVISION: 'Pendiente revisión',
   SOLICITADA_FACTURA: 'Solicitada',
   VALIDADA: 'Validada',
+  PAGADA_PARCIALMENTE: 'Pagada parcialmente',
   PAGADA: 'Pagada',
 }
 

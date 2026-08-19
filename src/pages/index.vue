@@ -41,6 +41,7 @@ function estadoLabel(key: string): string {
     PENDIENTE_REVISION: 'Pendiente revisión',
     SOLICITADA_FACTURA: 'Solicitada factura',
     VALIDADA: 'Validada',
+    PAGADA_PARCIALMENTE: 'Pagada parcialmente',
     PAGADA: 'Pagada',
   }
   return map[key] ?? key
@@ -51,6 +52,7 @@ function estadoColor(key: string): string {
     PENDIENTE_REVISION: 'warning',
     SOLICITADA_FACTURA: 'info',
     VALIDADA: 'primary',
+    PAGADA_PARCIALMENTE: 'warning',
     PAGADA: 'success',
   }
   return map[key] ?? 'secondary'
@@ -109,17 +111,17 @@ const isDark = computed(() => vuetifyTheme.current.value.dark)
 const colorTexto = computed(() => isDark.value ? '#E1DEF5' : '#2F2B3D')
 const colorBorde = computed(() => isDark.value ? 'rgba(225,222,245,0.12)' : 'rgba(47,43,61,0.12)')
 
-const coloresEstado = ['#FF9F43', '#00BAD1', '#0c6fb4', '#28C76F']
+const coloresEstado = ['#FF9F43', '#00BAD1', '#0c6fb4', '#FFB400', '#28C76F']
 
 // ─── Donut: facturas por estado ───────────────────────────────────────────────
 const donutSeries = computed(() => {
   const d = datos.value?.facturasPorEstado ?? {}
-  return ['PENDIENTE_REVISION', 'SOLICITADA_FACTURA', 'VALIDADA', 'PAGADA'].map(k => d[k]?.count ?? 0)
+  return ['PENDIENTE_REVISION', 'SOLICITADA_FACTURA', 'VALIDADA', 'PAGADA_PARCIALMENTE', 'PAGADA'].map(k => d[k]?.count ?? 0)
 })
 
 const donutOptions = computed(() => ({
   chart: { type: 'donut', background: 'transparent' },
-  labels: ['Pendiente revisión', 'Solicitada factura', 'Validada', 'Pagada'],
+  labels: ['Pendiente revisión', 'Solicitada factura', 'Validada', 'Pagada parcialmente', 'Pagada'],
   colors: coloresEstado,
   dataLabels: { enabled: false },
   legend: {
@@ -349,7 +351,7 @@ const headersMovimientos = [
             <!-- Detalle importes por estado -->
             <VDivider class="my-3" />
             <div
-              v-for="(key, i) in ['PENDIENTE_REVISION','SOLICITADA_FACTURA','VALIDADA','PAGADA']"
+              v-for="(key, i) in ['PENDIENTE_REVISION','SOLICITADA_FACTURA','VALIDADA','PAGADA_PARCIALMENTE','PAGADA']"
               :key="key"
               class="d-flex align-center justify-space-between py-1"
             >

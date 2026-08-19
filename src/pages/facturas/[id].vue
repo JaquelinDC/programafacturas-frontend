@@ -110,12 +110,14 @@ const estadoLabel: Record<string, string> = {
   PENDIENTE_REVISION: 'Pendiente de revisión',
   SOLICITADA_FACTURA: 'Solicitada factura',
   VALIDADA: 'Validada',
+  PAGADA_PARCIALMENTE: 'Pagada parcialmente',
   PAGADA: 'Pagada',
 }
 const estadoColor: Record<string, string> = {
   PENDIENTE_REVISION: 'warning',
   SOLICITADA_FACTURA: 'info',
   VALIDADA: 'success',
+  PAGADA_PARCIALMENTE: 'warning',
   PAGADA: 'primary',
 }
 
