@@ -332,6 +332,8 @@ async function importarDesdeExcel() {
     )
     importResultado.value = res
     limpiarCache()
+    if (res.clientesNuevos > 0)
+      clientes.value = await $api<ClienteDto[]>('/clientes')
     await fetchAll()
   }
   catch (e: any) { showMsg(e?.data?.message || 'Error al importar', 'error') }

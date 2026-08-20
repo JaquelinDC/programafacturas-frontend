@@ -222,6 +222,27 @@ export interface EmpresaDto {
   logoAlto?: number
 }
 
+export interface EmpresaEmailCuentaDto {
+  id: number
+  empresaId: number
+  nombre?: string | null
+  host: string
+  puerto: number
+  protocolo: string
+  carpeta: string
+  usuario: string
+  activo: boolean
+  ultimaRevisionAt?: string | null
+  ultimoError?: string | null
+  createdAt?: string
+  updatedAt?: string | null
+}
+
+export interface EmailCuentaConexionResultDto {
+  exito: boolean
+  mensaje: string
+}
+
 // ─── Facturas ────────────────────────────────────────────────────────────────
 
 export interface IvaLineaDto {

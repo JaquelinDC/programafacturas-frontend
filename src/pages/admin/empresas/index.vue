@@ -182,6 +182,10 @@ async function saveAdmin() {
         </template>
         <template #item.actions="{ item }">
           <div class="d-flex gap-1">
+            <IconBtn size="small" :to="{ name: 'admin-empresas-id-email-cuentas', params: { id: item.id } }">
+              <VIcon icon="tabler-mail-cog" />
+              <VTooltip activator="parent" location="top">Cuentas de correo</VTooltip>
+            </IconBtn>
             <IconBtn size="small" @click="openCreateAdmin(item)">
               <VIcon icon="tabler-user-plus" />
               <VTooltip activator="parent" location="top">Crear administrador</VTooltip>

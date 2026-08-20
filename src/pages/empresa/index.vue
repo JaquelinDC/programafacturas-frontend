@@ -174,6 +174,12 @@ onMounted(cargar)
       </VCardActions>
     </VCard>
 
+    <EmpresaEmailCuentasCard
+      v-if="!sinEmpresa && !loading"
+      class="mt-6"
+      endpoint="/mi-empresa/email-cuentas"
+    />
+
     <VSnackbar
       v-model="snackbar"
       :color="snackbarColor"
