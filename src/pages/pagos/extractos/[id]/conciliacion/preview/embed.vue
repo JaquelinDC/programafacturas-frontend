@@ -1,21 +1,8 @@
 <script setup lang="ts">
-import type { ExtractoBancarioDto, ExtractoBancarioMovimientoDto, FacturaProveedorDto, PageResponse } from '@/types/api'
+import type { ConciliacionProveedorPreviewItem, ExtractoBancarioDto, PageResponse } from '@/types/api'
 import { $api } from '@/utils/api'
 
 definePage({ meta: { title: 'Conciliacion proveedor embebida' } })
-
-interface PropuestaFacturaProveedorPreviewDto {
-  factura: FacturaProveedorDto
-  score: number
-  confidence: string
-  reasons: string[]
-}
-
-interface ConciliacionProveedorPreviewItem {
-  movimiento: ExtractoBancarioMovimientoDto
-  candidatas: PropuestaFacturaProveedorPreviewDto[]
-  motivo: string | null
-}
 
 const route = useRoute()
 const id = computed(() => (route.params as { id: string }).id)
@@ -25,6 +12,8 @@ const cargando = ref(false)
 
 const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '-'
 const formatMoney = (n?: number) => n == null ? '-' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`
+const tieneSaldoParcial = (total?: number, pendiente?: number) =>
+  total != null && pendiente != null && Math.abs(Math.abs(Number(total)) - Math.abs(Number(pendiente))) >= 0.005
 const confidenceColor = (confidence?: string) => confidence === 'alta' ? 'success' : confidence === 'media' ? 'warning' : 'secondary'
 
 async function cargar() {
@@ -108,6 +97,12 @@ onMounted(cargar)
             </td>
             <td class="text-right">
               {{ formatMoney(item.movimiento.importe) }}
+              <div
+                v-if="tieneSaldoParcial(item.movimiento.importe, item.importePendienteMovimiento)"
+                class="text-caption text-warning"
+              >
+                Pendiente: {{ formatMoney(item.importePendienteMovimiento) }}
+              </div>
             </td>
             <td>
               <span

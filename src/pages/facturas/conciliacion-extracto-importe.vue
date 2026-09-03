@@ -377,7 +377,7 @@ onMounted(cargar)
       <div class="d-flex flex-wrap align-center gap-4 mb-3">
         <VSwitch
           v-model="usarFecha"
-          label="Mismo día"
+          label="Mismo día (±1 día)"
           :disabled="automatico"
           hide-details
           density="compact"

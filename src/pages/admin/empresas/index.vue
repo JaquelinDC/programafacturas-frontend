@@ -31,6 +31,7 @@ const form = ref({
   logoUrl: '',
   colorPrimario: '',
   logoAlto: DEFAULT_LOGO_HEIGHT,
+  rutaCarpeta: '',
   activa: true,
 })
 
@@ -55,6 +56,7 @@ watch(dialog, open => {
       logoUrl: editingItem.value?.logoUrl ?? '',
       colorPrimario: editingItem.value?.colorPrimario ?? '',
       logoAlto: editingItem.value?.logoAlto ?? DEFAULT_LOGO_HEIGHT,
+      rutaCarpeta: editingItem.value?.rutaCarpeta ?? '',
       activa: editingItem.value?.activa ?? true,
     }
   }
@@ -72,6 +74,7 @@ const headers = [
   { title: 'Nombre', key: 'nombre' },
   { title: 'CIF', key: 'cif', width: 130 },
   { title: 'Email contacto', key: 'emailContacto' },
+  { title: 'Ruta carpeta', key: 'rutaCarpeta', width: 280 },
   { title: 'Color', key: 'colorPrimario', width: 80, sortable: false },
   { title: 'Activa', key: 'activa', width: 100 },
   { title: 'Creada', key: 'creadaEn', width: 160 },
@@ -172,6 +175,11 @@ async function saveAdmin() {
           <VAvatar v-if="item.colorPrimario" size="20" :style="{ backgroundColor: item.colorPrimario }" />
           <span v-else class="text-disabled">—</span>
         </template>
+        <template #item.rutaCarpeta="{ item }">
+          <span class="text-truncate d-inline-block" style="max-width: 260px" :title="item.rutaCarpeta || ''">
+            {{ item.rutaCarpeta || '—' }}
+          </span>
+        </template>
         <template #item.activa="{ item }">
           <VChip :color="item.activa ? 'success' : 'default'" size="small" label>
             {{ item.activa ? 'Activa' : 'Inactiva' }}
@@ -240,6 +248,15 @@ async function saveAdmin() {
                   </VCol>
                   <VCol cols="12" sm="6" class="d-flex align-center">
                     <VSwitch v-model="form.activa" label="Activa" color="primary" />
+                  </VCol>
+                  <VCol cols="12">
+                    <AppTextField
+                      v-model="form.rutaCarpeta"
+                      label="Ruta de carpeta"
+                      placeholder="/root/sharepoint_data/contabilidad/TRACOM"
+                      hint="Ruta absoluta de la empresa; dentro estarán las carpetas de cada entidad"
+                      persistent-hint
+                    />
                   </VCol>
                 </VRow>
               </template>

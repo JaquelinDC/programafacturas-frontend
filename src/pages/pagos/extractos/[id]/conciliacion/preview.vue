@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { ConciliacionMovimientoDto, ExtractoBancarioDto, ExtractoBancarioMovimientoDto, FacturaProveedorDto, FacturaProveedorResumenDto, PageResponse } from '@/types/api'
+import type { ConciliacionMovimientoDto, ConciliacionProveedorPreviewItem, ExtractoBancarioDto, ExtractoBancarioMovimientoDto, FacturaProveedorDto, FacturaProveedorResumenDto, PageResponse } from '@/types/api'
 import { $api } from '@/utils/api'
 import { useConciliacion } from '@/composables/useConciliacion'
 import BadgeCoincidenciaConciliacion from '@/components/conciliacion/BadgeCoincidenciaConciliacion.vue'
@@ -11,19 +11,6 @@ import PanelBusquedaManualConciliacion from '@/components/conciliacion/PanelBusq
 
 definePage({ meta: { title: 'Conciliar movimientos con facturas proveedor' } })
 
-interface PropuestaFacturaProveedorPreviewDto {
-  factura: FacturaProveedorDto
-  score: number
-  confidence: 'alta' | 'media' | 'baja' | string
-  reasons: string[]
-}
-
-interface ConciliacionProveedorPreviewItem {
-  movimiento: ExtractoBancarioMovimientoDto
-  candidatas: PropuestaFacturaProveedorPreviewDto[]
-  motivo: string | null
-}
-
 const route = useRoute()
 const id = computed(() => (route.params as { id: string }).id)
 const extracto = ref<ExtractoBancarioDto | null>(null)
@@ -31,6 +18,8 @@ const items = ref<ConciliacionProveedorPreviewItem[]>([])
 const seleccionadas = ref<string[]>([])
 const cargando = ref(false)
 const guardando = ref(false)
+const soloConflictos = ref(false)
+const confirmDialog = ref(false)
 const error = ref('')
 const mensaje = ref('')
 const automatico = ref(true)
@@ -94,6 +83,8 @@ async function verPdf(factura: FacturaProveedorDto) {
 
 const formatDate = (d?: string) => d ? d.substring(0, 10).split('-').reverse().join('/') : '-'
 const formatMoney = (n?: number) => n == null ? '-' : `${Number(n).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`
+const tieneSaldoParcial = (total?: number, pendiente?: number) =>
+  total != null && pendiente != null && Math.abs(Math.abs(Number(total)) - Math.abs(Number(pendiente))) >= 0.005
 
 function clave(movimientoId: number, facturaId: number) {
   return `${movimientoId}:${facturaId}`
@@ -122,6 +113,42 @@ function seleccionarMejorPropuesta(itemsResp: ConciliacionProveedorPreviewItem[]
   })
 }
 
+const movimientosSeleccionadosPorFactura = computed(() => {
+  const selecciones = new Map<number, Set<number>>()
+  for (const seleccion of seleccionadas.value) {
+    const [movimientoIdRaw, facturaIdRaw] = seleccion.split(':')
+    const movimientoId = Number(movimientoIdRaw)
+    const facturaId = Number(facturaIdRaw)
+    const movimientoIds = selecciones.get(facturaId) ?? new Set<number>()
+
+    movimientoIds.add(movimientoId)
+    selecciones.set(facturaId, movimientoIds)
+  }
+
+  return selecciones
+})
+
+const facturaIdsEnConflicto = computed(() => new Set(
+  [...movimientosSeleccionadosPorFactura.value.entries()]
+    .filter(([, movimientoIds]) => movimientoIds.size > 1)
+    .map(([facturaId]) => facturaId),
+))
+
+const facturasEnConflictoCount = computed(() => facturaIdsEnConflicto.value.size)
+
+const itemsVisibles = computed(() => {
+  if (!soloConflictos.value)
+    return items.value
+
+  return items.value
+    .map(item => ({
+      ...item,
+      candidatas: item.candidatas.filter(propuesta =>
+        propuesta.factura.id != null && facturaIdsEnConflicto.value.has(propuesta.factura.id)),
+    }))
+    .filter(item => item.candidatas.length)
+})
+
 function criteriosQuery() {
   return new URLSearchParams({
     automatico: String(automatico.value),
@@ -148,7 +175,7 @@ function abrirBusquedaManual(item: ConciliacionProveedorPreviewItem) {
     fecha: item.movimiento.fechaMovimiento,
     concepto: item.movimiento.concepto,
     observaciones: item.movimiento.observaciones,
-    importe: item.movimiento.importe,
+    importe: item.importePendienteMovimiento,
     estado: 'PENDIENTE',
     facturas: [],
   }
@@ -234,8 +261,9 @@ async function confirmarSeleccion(relaciones = seleccionadas.value) {
       body: relaciones,
     })
 
-    mensaje.value = res?.mensaje || 'Conciliacion aplicada.'
+    confirmDialog.value = false
     await cargar()
+    mensaje.value = res?.mensaje || 'Conciliacion aplicada.'
   }
   catch (err: any) {
     error.value = err?.data?.message || err?.message || 'No se pudo confirmar la conciliacion.'
@@ -243,6 +271,11 @@ async function confirmarSeleccion(relaciones = seleccionadas.value) {
   finally {
     guardando.value = false
   }
+}
+
+function abrirConfirmacionGlobal() {
+  if (seleccionadas.value.length)
+    confirmDialog.value = true
 }
 
 function seleccionesMovimiento(movimientoId: number) {
@@ -322,7 +355,7 @@ onMounted(cargar)
             color="primary"
             :loading="guardando"
             :disabled="cargando || !seleccionadas.length"
-            @click="confirmarSeleccion"
+            @click="abrirConfirmacionGlobal"
           >
             Conciliar todos los seleccionados ({{ seleccionadas.length }})
           </VBtn>
@@ -362,7 +395,7 @@ onMounted(cargar)
           <div class="d-flex flex-wrap align-center gap-4 mb-3">
             <VSwitch
               v-model="usarFecha"
-              label="Mismo día"
+              label="Mismo día (±1 día)"
               :disabled="automatico"
               hide-details
               density="compact"
@@ -387,6 +420,14 @@ onMounted(cargar)
               @click="cargarDesdePagina1"
             >
               Aplicar criterios
+            </VBtn>
+            <VBtn
+              :color="soloConflictos ? 'warning' : undefined"
+              :variant="soloConflictos ? 'flat' : 'tonal'"
+              :disabled="!facturasEnConflictoCount && !soloConflictos"
+              @click="soloConflictos = !soloConflictos"
+            >
+              {{ soloConflictos ? 'Ver todos' : `Ver solo conflictos (${facturasEnConflictoCount})` }}
             </VBtn>
           </div>
           <FiltrosBusquedaConciliacion
@@ -414,6 +455,16 @@ onMounted(cargar)
         {{ mensaje }}
       </VAlert>
 
+      <VAlert
+        v-if="!cargando && facturasEnConflictoCount"
+        type="warning"
+        variant="tonal"
+        class="mb-4"
+      >
+        Has seleccionado {{ facturasEnConflictoCount }} factura(s) en más de un movimiento.
+        Se crearán todos los vínculos N:N seleccionados.
+      </VAlert>
+
       <div class="mb-4 text-body-2 text-disabled">
         Se propone una mejor sugerencia por movimiento y se mantienen candidatas de confianza media o baja para revision manual.
       </div>
@@ -426,7 +477,7 @@ onMounted(cargar)
 
       <VRow v-else>
         <VCol
-          v-for="item in items"
+          v-for="item in itemsVisibles"
           :key="item.movimiento.id"
           cols="12"
         >
@@ -475,12 +526,18 @@ onMounted(cargar)
                   <div class="text-subtitle-1">
                     {{ formatMoney(item.movimiento.importe) }}
                   </div>
+                  <div
+                    v-if="tieneSaldoParcial(item.movimiento.importe, item.importePendienteMovimiento)"
+                    class="text-caption text-warning"
+                  >
+                    Pendiente: {{ formatMoney(item.importePendienteMovimiento) }}
+                  </div>
                   <VChip
                     size="small"
-                    :color="facturasVinculadas(item.movimiento).length ? 'success' : item.candidatas.length ? 'warning' : 'secondary'"
+                    :color="facturasVinculadas(item.movimiento).length ? 'warning' : item.candidatas.length ? 'warning' : 'secondary'"
                     variant="tonal"
                   >
-                    {{ facturasVinculadas(item.movimiento).length ? 'Conciliado' : item.candidatas.length ? `${item.candidatas.length} candidatas` : 'Sin candidatas' }}
+                    {{ facturasVinculadas(item.movimiento).length ? 'Parcial' : item.candidatas.length ? `${item.candidatas.length} candidatas` : 'Sin candidatas' }}
                   </VChip>
                 </div>
               </div>
@@ -554,6 +611,12 @@ onMounted(cargar)
                     <td>{{ formatDate(propuesta.factura.fechaFactura) }}</td>
                     <td class="text-right">
                       {{ formatMoney(propuesta.factura.importeTotal) }}
+                      <div
+                        v-if="tieneSaldoParcial(propuesta.factura.importeTotal, propuesta.importePendienteFactura)"
+                        class="text-caption text-warning"
+                      >
+                        Pendiente: {{ formatMoney(propuesta.importePendienteFactura) }}
+                      </div>
                     </td>
                     <td>
                       <BadgeCoincidenciaConciliacion
@@ -640,6 +703,44 @@ onMounted(cargar)
       </div>
     </VCardText>
   </VCard>
+
+  <VDialog
+    v-model="confirmDialog"
+    max-width="560"
+  >
+    <VCard>
+      <VCardTitle>Confirmar conciliación</VCardTitle>
+      <VCardText>
+        Se crearán {{ seleccionadas.length }} vínculo(s) de conciliación.
+        <VAlert
+          v-if="facturasEnConflictoCount"
+          type="warning"
+          variant="tonal"
+          density="compact"
+          class="mt-3"
+        >
+          {{ facturasEnConflictoCount }} factura(s) están seleccionadas para más de un movimiento.
+          Se crearán todos los vínculos N:N seleccionados.
+        </VAlert>
+      </VCardText>
+      <VCardActions>
+        <VSpacer />
+        <VBtn
+          variant="text"
+          @click="confirmDialog = false"
+        >
+          Cancelar
+        </VBtn>
+        <VBtn
+          color="primary"
+          :loading="guardando"
+          @click="confirmarSeleccion()"
+        >
+          Conciliar
+        </VBtn>
+      </VCardActions>
+    </VCard>
+  </VDialog>
 
   <VDialog
     v-model="pdfDialogOpen"

@@ -220,6 +220,7 @@ export interface EmpresaDto {
   emailContacto?: string
   colorPrimario?: string
   logoAlto?: number
+  rutaCarpeta?: string
 }
 
 export interface EmpresaEmailCuentaDto {
@@ -431,6 +432,21 @@ export interface ImportacionExtractoResponse {
   movimientosGuardados: number
   filasIgnoradas: number
   mensaje: string
+}
+
+export interface PropuestaFacturaProveedorPreviewDto {
+  factura: FacturaProveedorDto
+  importePendienteFactura: number
+  score: number
+  confidence: 'alta' | 'media' | 'baja' | string
+  reasons: string[]
+}
+
+export interface ConciliacionProveedorPreviewItem {
+  movimiento: ExtractoBancarioMovimientoDto
+  importePendienteMovimiento: number
+  candidatas: PropuestaFacturaProveedorPreviewDto[]
+  motivo: string | null
 }
 
 // ─── Filtros ─────────────────────────────────────────────────────────────────
